@@ -1,0 +1,127 @@
+.player {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--video-bg);
+  color: var(--on-video);
+
+  &:fullscreen {
+    border-radius: 0;
+    aspect-ratio: auto;
+    .video {
+      object-fit: contain;
+    }
+  }
+}
+
+.video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  cursor: pointer;
+}
+
+.center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.controls {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 40px 12px 12px;
+  background: var(--scrim);
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease);
+}
+
+.player:hover .controls,
+.player:focus-within .controls {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .controls {
+    opacity: 1;
+  }
+}
+
+.ctl {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--on-video);
+  cursor: pointer;
+  flex: none;
+  &:hover {
+    background: rgba(247, 248, 244, 0.14);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--sl-lime);
+    outline-offset: 0;
+  }
+}
+
+.time {
+  font-size: 12px;
+  color: var(--on-video-muted);
+  margin: 0 6px;
+  white-space: nowrap;
+}
+
+.scrub {
+  flex: 1;
+  min-width: 60px;
+  height: 20px;
+  margin: 0 8px;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+
+  &::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 999px;
+    background: linear-gradient(to right, var(--sl-lime) var(--p), rgba(247, 248, 244, 0.25) var(--p));
+  }
+  &::-moz-range-track {
+    height: 4px;
+    border-radius: 999px;
+    background: linear-gradient(to right, var(--sl-lime) var(--p), rgba(247, 248, 244, 0.25) var(--p));
+  }
+  &::-webkit-slider-thumb {
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    margin-top: -4px;
+    border-radius: 50%;
+    background: var(--on-video);
+  }
+  &::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--on-video);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--sl-lime);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}

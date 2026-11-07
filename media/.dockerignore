@@ -1,0 +1,3 @@
+.cache/downloads/*.part
+dist/videos/*.tmp.mp4
+Dockerfile

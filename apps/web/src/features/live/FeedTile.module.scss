@@ -1,0 +1,343 @@
+.tile {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--video-bg);
+  color: var(--on-video);
+  cursor: pointer;
+  isolation: isolate;
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+
+  &:focus-visible {
+    box-shadow:
+      0 0 0 2px var(--bg),
+      0 0 0 4px var(--focus);
+  }
+}
+
+.main {
+  cursor: default;
+}
+
+.video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: var(--video-bg);
+}
+
+.fullscreen {
+  border-radius: 0;
+  .video {
+    object-fit: contain;
+  }
+}
+
+// ---------------------------------------------------------------- overlays
+
+.center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 12px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.message {
+  background: rgba(11, 12, 11, 0.7);
+  pointer-events: auto;
+  text-align: center;
+  padding: 16px;
+  font-size: 14px;
+  color: var(--on-video-muted);
+
+  :global(.sl-button.secondary) {
+    color: var(--on-video);
+    box-shadow: inset 0 0 0 1px rgba(247, 248, 244, 0.35);
+    &:hover {
+      background: rgba(247, 248, 244, 0.1);
+    }
+  }
+}
+
+.statusChip {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--glass);
+  backdrop-filter: blur(8px);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+// Restrained, always-visible live intensity.
+.badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--glass);
+  backdrop-filter: blur(8px);
+  color: var(--on-video);
+  font-size: 13px;
+  line-height: 1;
+  transition:
+    background-color var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    opacity var(--dur) var(--ease);
+
+  .mono {
+    min-width: 2ch;
+    text-align: right;
+  }
+}
+
+.hot {
+  background: var(--sl-lime);
+  color: var(--sl-ink);
+}
+
+.stale {
+  opacity: 0.6;
+}
+
+.meter {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  z-index: 3;
+  background: rgba(247, 248, 244, 0.12);
+
+  span {
+    display: block;
+    height: 100%;
+    background: rgba(247, 248, 244, 0.7);
+    transform-origin: left center;
+    transition:
+      transform 600ms var(--ease),
+      background-color var(--dur) var(--ease);
+  }
+  .meterHot {
+    background: var(--sl-lime);
+  }
+}
+
+.title {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 64px 28px 14px;
+  background: var(--scrim-top);
+  opacity: 0;
+  transform: translateY(-4px);
+  transition:
+    opacity var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+  pointer-events: none;
+}
+
+.titleMain {
+  font-weight: 700;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.main .titleMain {
+  font-size: 17px;
+}
+
+.subtitle {
+  font-size: 13px;
+  color: var(--on-video-muted);
+}
+
+.titleShown {
+  opacity: 1;
+  transform: none;
+}
+
+// ---------------------------------------------------------------- controls (hover / focus / touch)
+
+.controls {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 36px 8px 10px;
+  background: var(--scrim);
+  opacity: 0;
+  transform: translateY(6px);
+  transition:
+    opacity var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+  pointer-events: none;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.ctl {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--on-video);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
+
+  &:hover {
+    background: rgba(247, 248, 244, 0.14);
+  }
+  &:active {
+    transform: scale(0.92);
+  }
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+  &:focus-visible {
+    outline: 2px solid var(--sl-lime);
+    outline-offset: 0;
+  }
+}
+
+.voted {
+  color: var(--sl-ink);
+  background: var(--sl-lime);
+  &:hover {
+    background: var(--sl-lime);
+  }
+}
+
+.votedDown {
+  color: var(--sl-ink);
+  background: var(--on-video);
+  &:hover {
+    background: var(--on-video);
+  }
+}
+
+@mixin reveal {
+  .controls {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+  }
+  .title {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (hover: hover) {
+  .tile:hover {
+    @include reveal;
+  }
+}
+.tile:focus-within,
+.revealed {
+  @include reveal;
+}
+
+// Touch devices without hover: keep the main window's controls discoverable.
+@media (hover: none) {
+  .main .controls {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+    background: linear-gradient(to top, rgba(11, 12, 11, 0.55), transparent);
+  }
+}
+
+.side {
+  .ctl {
+    width: 32px;
+    height: 32px;
+  }
+  .controls {
+    padding: 28px 6px 8px;
+  }
+}
+
+.goLive {
+  position: absolute;
+  left: 12px;
+  bottom: 58px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--sl-lime);
+  color: var(--sl-ink);
+  font: 650 13px var(--font);
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  animation: rise var(--dur) var(--ease-out);
+
+  .mono {
+    font-weight: 400;
+    opacity: 0.75;
+  }
+}
+
+.side .goLive {
+  bottom: 48px;
+  left: 8px;
+  height: 28px;
+  font-size: 12px;
+}
+
+.liveDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--sl-ink);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "$comment": "Openly licensed demo footage from Wikimedia Commons. build.mjs resolves each file through the Commons API, records author/licence for attribution, and transcodes segments into one looping 720p MP4 per clip. Edit this list to change the demo media; the clip id is what feeds reference.",
+  "output": { "width": 1280, "height": 720, "fps": 30, "thumbnailIntervalSec": 2 },
+  "clips": [
+    {
+      "id": "football-fra-ger",
+      "segments": [
+        { "commons": "File:Match de football France-Allemagne - 16 octobre 2018 - Penalty d'Antoine Griezmann.ogv" },
+        { "commons": "File:Match de football France-Allemagne - 16 octobre 2018 - Penalty de Toni Kroos.ogv" }
+      ]
+    },
+    {
+      "id": "basketball-hawaii",
+      "segments": [{ "commons": "File:Hawaii Basketball - Highlights From Northern Arizona Game.webm", "start": 20, "duration": 100 }]
+    },
+    {
+      "id": "tennis-davis-cup",
+      "segments": [
+        { "commons": "File:2018 Davis Cup Americas Zone - Uruguay vs Mexico - 03.webm" },
+        { "commons": "File:2018 Davis Cup Americas Zone - Uruguay vs Mexico - 04.webm" },
+        { "commons": "File:2018 Davis Cup Americas Zone - Uruguay vs Mexico - 05.webm" },
+        { "commons": "File:2018 Davis Cup Americas Zone - Uruguay vs Mexico - 06.webm" },
+        { "commons": "File:2018 Davis Cup Americas Zone - Uruguay vs Mexico - 07.webm" }
+      ]
+    },
+    {
+      "id": "motorsport-turkish-gp",
+      "segments": [{ "commons": "File:Formula 1 Turkish GP 2021.ogg" }]
+    },
+    {
+      "id": "motorsport-formula07",
+      "segments": [{ "commons": "File:Formula 07 2023, Fecha 5, carrera Clase B.webm", "duration": 90 }]
+    },
+    {
+      "id": "icehockey-rpi",
+      "segments": [
+        { "commons": "File:RPI Engineers women's ice hockey play against Syracuse at the Tennity Ice Skating Pavilion, Syracuse University.webm" }
+      ]
+    },
+    {
+      "id": "cycling-zottegem",
+      "segments": [
+        { "commons": "File:Zottegem - Grote Prijs Stad Zottegem, 18 augustus 2015 (C30A).ogv" },
+        { "commons": "File:Zottegem - Grote Prijs Stad Zottegem, 19 augustus 2014 (A79A).ogv" }
+      ]
+    },
+    {
+      "id": "rugby-mixed",
+      "segments": [
+        { "commons": "File:Toads attack (rugby).webm" },
+        { "commons": "File:Italy Georgia rugby 2024 kick-off.ogg" },
+        { "commons": "File:2023 South American Men's Rugby Sevens - Video 2.webm" }
+      ]
+    },
+    {
+      "id": "chess-blitz",
+      "segments": [{ "commons": "File:Joaquin Perkins blitz chess vs USCF expert.webm" }]
+    },
+    {
+      "id": "esports-yokota",
+      "segments": [{ "commons": "File:Yokota Esports Tournament of Champions (NO GRAPHICS) (994894).webm" }]
+    },
+    {
+      "id": "athletics-relay",
+      "segments": [{ "commons": "File:4x100 m female Athletissima 2012.ogv" }]
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.DS_Store
+.env
+.env.*
+!.env.example
+coverage/
+# Generated demo media (rebuilt by `npm run media` / the media Docker image)
+media/.cache/
+media/dist/
+# Backend runtime data (intensity history, highlights)
+data/
+apps/backend/data/

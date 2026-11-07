@@ -1,0 +1,24 @@
+{
+  "name": "@sportlight/backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Consumes feed events from RabbitMQ, owns authoritative feed state, intensity history and highlights, and fans updates out to browsers over WebSocket.",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch --clear-screen=false src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@sportlight/shared": "^0.1.0",
+    "amqplib": "^0.10.9",
+    "ws": "^8.22.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/amqplib": "^0.10.8",
+    "@types/ws": "^8.18.2",
+    "tsx": "^4.23.15"
+  }
+}

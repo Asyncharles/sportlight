@@ -1,0 +1,30 @@
+{
+  "name": "sportlight",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Sportlight — watch the most intense live sports moments, side by side.",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "build": "npm run build -w @sportlight/shared && npm run build -w @sportlight/backend -w @sportlight/publisher -w @sportlight/web",
+    "dev": "npm run build -w @sportlight/shared && concurrently -k -n shared,backend,publisher,web -c gray,green,magenta,cyan \"npm run dev -w @sportlight/shared\" \"npm run dev -w @sportlight/backend\" \"npm run dev -w @sportlight/publisher\" \"npm run dev -w @sportlight/web\"",
+    "media": "node media/build.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "npm run build -w @sportlight/shared && tsc -p apps/backend --noEmit && tsc -p apps/publisher --noEmit && tsc -p apps/web --noEmit",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "concurrently": "^9.2.5",
+    "prettier": "^3.9.10",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9"
+  }
+}

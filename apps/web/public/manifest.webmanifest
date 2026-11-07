@@ -1,0 +1,14 @@
+{
+  "name": "Sportlight",
+  "short_name": "Sportlight",
+  "description": "The moment is now. The most intense live sports moments, side by side.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#101210",
+  "theme_color": "#171917",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "icon.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

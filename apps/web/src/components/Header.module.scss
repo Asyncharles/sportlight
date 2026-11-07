@@ -1,0 +1,150 @@
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  height: var(--header-h);
+  padding: 0 calc(var(--gutter) + 6px);
+  padding-top: env(safe-area-inset-top);
+  background: var(--bg);
+}
+
+.left,
+.right {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+}
+
+.right {
+  gap: 6px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  border-radius: 6px;
+}
+
+.live,
+.best,
+.iconLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  color: var(--text);
+  font-weight: 600;
+  font-size: 14px;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
+
+  &:hover {
+    background: var(--surface-2);
+  }
+}
+
+.active {
+  background: var(--surface-2);
+}
+
+.live {
+  padding-left: 10px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  transition: background-color var(--dur) var(--ease);
+}
+
+.dotLive {
+  background: var(--sl-lime);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--sl-lime) 28%, transparent);
+}
+
+.dotOff {
+  background: var(--text-faint);
+}
+
+.clock {
+  color: var(--text-muted);
+  font-weight: 400;
+  font-size: 13px;
+}
+
+.iconLink {
+  width: 36px;
+  padding: 0;
+  justify-content: center;
+}
+
+.icons {
+  display: inline-flex;
+  gap: 4px;
+  color: var(--text-muted);
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  animation: tag-in var(--dur-slow) var(--ease-out);
+
+  .mono {
+    color: var(--accent-text);
+  }
+}
+
+.active .tag {
+  background: var(--surface-3);
+}
+
+.tagTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@keyframes tag-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@media (max-width: 900px) {
+  .tag {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .clock,
+  .icons {
+    display: none;
+  }
+  .left {
+    gap: 8px;
+  }
+  .bestLabel {
+    font-size: 13px;
+  }
+}

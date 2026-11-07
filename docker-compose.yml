@@ -1,0 +1,79 @@
+# Complete Sportlight stack: RabbitMQ, mock provider, backend, media origin and web front end.
+#   docker compose up --build        → http://localhost:8080
+# RabbitMQ management UI: http://localhost:15672 (guest / guest)
+
+name: sportlight
+
+services:
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+
+  media:
+    build:
+      context: ./media
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/catalog.json"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      target: backend
+    environment:
+      AMQP_URL: amqp://guest:guest@rabbitmq:5672
+      HIGHLIGHT_TIMEZONE: ${HIGHLIGHT_TIMEZONE:-Europe/London}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-}
+      LOG_LEVEL: info
+    volumes:
+      - backend-data:/data
+    ports:
+      - "4000:4000"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  publisher:
+    build:
+      context: .
+      target: publisher
+    environment:
+      AMQP_URL: amqp://guest:guest@rabbitmq:5672
+      MEDIA_CATALOG: http://media:8080/catalog.json
+      MEDIA_PUBLIC_BASE: /media
+      SCENARIO_SEED: ${SCENARIO_SEED:-20261107}
+      # Light chaos so the backend's ordering/dedupe paths are exercised (see admin view).
+      CHAOS_DUPLICATE_RATE: ${CHAOS_DUPLICATE_RATE:-0.02}
+      CHAOS_DELAY_RATE: ${CHAOS_DELAY_RATE:-0.02}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      media:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      target: web
+    ports:
+      - "8080:8080"
+    depends_on:
+      - backend
+      - media
+
+volumes:
+  rabbitmq-data:
+  backend-data:

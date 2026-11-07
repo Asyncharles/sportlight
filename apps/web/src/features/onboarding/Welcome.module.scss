@@ -1,0 +1,132 @@
+.screen {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: var(--header-h);
+  padding: 0 24px;
+  padding-top: env(safe-area-inset-top);
+}
+
+.back {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  margin-left: -8px;
+  border-radius: 999px;
+  color: var(--text);
+  &:hover {
+    background: var(--surface-2);
+  }
+}
+
+.hero {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px 24px 64px;
+  animation: enter var(--dur-slow) var(--ease-out);
+}
+
+@keyframes enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.title {
+  font-size: clamp(32px, 5.2vw, 56px);
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+}
+
+.tagline {
+  margin-top: 10px;
+  font-size: clamp(17px, 2vw, 20px);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.illustration {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  margin: 44px 0 32px;
+}
+
+.lede {
+  max-width: 440px;
+  color: var(--text-muted);
+  margin-bottom: 28px;
+}
+
+.cta {
+  min-width: 220px;
+}
+
+// ---------------------------------------------------------------- choose sports
+
+.choose {
+  width: min(880px, 100%);
+  margin: 0 auto;
+  padding: 24px 24px 120px;
+  animation: enter var(--dur-slow) var(--ease-out);
+}
+
+.chooseHead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.chooseTitle {
+  font-size: clamp(26px, 3.4vw, 36px);
+  font-weight: 750;
+  letter-spacing: -0.02em;
+}
+
+.chooseText {
+  margin-top: 6px;
+  color: var(--text-muted);
+}
+
+.footer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  padding: 16px 24px;
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid var(--border);
+}
+
+.count {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+@media (max-width: 560px) {
+  .chooseHead {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

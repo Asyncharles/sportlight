@@ -1,0 +1,136 @@
+.wrap {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  gap: 12px;
+  width: min(440px, 100%);
+  aspect-ratio: 440 / 190;
+}
+
+.column {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  gap: 12px;
+}
+
+.window {
+  position: relative;
+  overflow: hidden;
+  border-radius: 14px;
+  background: var(--video-bg);
+  box-shadow:
+    0 0 0 1px var(--border),
+    var(--shadow);
+}
+
+.content {
+  position: absolute;
+  inset: 0;
+  animation: pop-in 420ms var(--ease-out);
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+
+// Abstract "pitch/track/court" fills, one per sport, so the windows read as different feeds.
+.field {
+  position: absolute;
+  inset: 0;
+  opacity: 0.9;
+  background: radial-gradient(120% 90% at 30% 110%, #2c3a24 0%, #151915 60%);
+
+  &[data-sport='football'] {
+    background: repeating-linear-gradient(90deg, #233b20 0 18%, #27431f 18% 36%), #233b20;
+  }
+  &[data-sport='motorsport'] {
+    background: linear-gradient(160deg, #2b2f33 0 55%, #3a3f44 55% 62%, #1e2124 62%);
+  }
+  &[data-sport='tennis'] {
+    background: linear-gradient(#3b2a22, #2f211b);
+  }
+  &[data-sport='ice-hockey'] {
+    background: linear-gradient(#cfd8dc, #a9b6bc);
+  }
+  &[data-sport='basketball'] {
+    background: linear-gradient(#4a3420, #3a2817);
+  }
+  &[data-sport='cycling'] {
+    background: linear-gradient(180deg, #33402b, #4b4b45 70%);
+  }
+  &[data-sport='esports'] {
+    background: radial-gradient(80% 80% at 70% 30%, #283a52, #121822);
+  }
+  &[data-sport='rugby'] {
+    background: repeating-linear-gradient(0deg, #29401f 0 22%, #2d4722 22% 44%);
+  }
+}
+
+.icon {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  color: var(--on-video);
+  opacity: 0.92;
+}
+
+.name {
+  position: absolute;
+  left: 46px;
+  top: 14px;
+  color: var(--on-video);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.score {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--glass);
+  color: var(--on-video);
+  font-size: 12px;
+  line-height: 1;
+  transition:
+    background-color var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+}
+
+.hot {
+  background: var(--sl-lime);
+  color: var(--sl-ink);
+}
+
+.meter {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: rgba(247, 248, 244, 0.15);
+
+  span {
+    display: block;
+    height: 100%;
+    background: var(--sl-lime);
+    transform-origin: left;
+    transition: transform 900ms var(--ease);
+  }
+}
+
+.big {
+  .score {
+    font-size: 14px;
+    padding: 4px 9px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .content {
+    animation: none;
+  }
+}

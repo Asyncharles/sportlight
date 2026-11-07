@@ -1,0 +1,21 @@
+{
+  "name": "@sportlight/publisher",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Mock feed provider: publishes a repeatable demo scenario of feed lifecycle and intensity events to RabbitMQ.",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch --clear-screen=false src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@sportlight/shared": "^0.1.0",
+    "amqplib": "^0.10.9"
+  },
+  "devDependencies": {
+    "@types/amqplib": "^0.10.8",
+    "tsx": "^4.23.15"
+  }
+}

@@ -1,0 +1,146 @@
+// Desktop: three stacked side windows on the left, one large main window on the right.
+.stage {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(220px, clamp(240px, 27vw, 440px)) 1fr;
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+  grid-template-areas:
+    'side1 main'
+    'side2 main'
+    'side3 main';
+  gap: var(--gutter);
+  height: 100%;
+  min-height: 0;
+}
+
+.slot {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  border-radius: var(--radius);
+}
+
+.slot:nth-child(1) {
+  grid-area: main;
+}
+.slot:nth-child(2) {
+  grid-area: side1;
+}
+.slot:nth-child(3) {
+  grid-area: side2;
+}
+.slot:nth-child(4) {
+  grid-area: side3;
+}
+
+.placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text-faint);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  padding: 12px;
+}
+
+.loadingBar {
+  width: 32%;
+  max-width: 140px;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, var(--border-strong), transparent);
+  background-size: 200% 100%;
+  animation: sweep 1.4s linear infinite;
+}
+
+@keyframes sweep {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loadingBar {
+    animation: none;
+    background: var(--border-strong);
+  }
+}
+
+// Tiles: one absolutely positioned layer per feed, placed onto the measured slot rectangle.
+.layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  opacity: 0;
+  will-change: transform, width, height, opacity;
+  transition:
+    transform var(--dur) var(--ease),
+    width var(--dur) var(--ease),
+    height var(--dur) var(--ease),
+    opacity var(--dur) var(--ease);
+}
+
+.visible {
+  opacity: 1;
+}
+
+.instant .layer {
+  transition: opacity var(--dur) var(--ease);
+}
+
+// Tablet / phone: main window on top, side windows in a row beneath.
+@media (max-width: 820px) {
+  .stage {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'main main main'
+      'side1 side2 side3';
+  }
+  .sideSlot {
+    aspect-ratio: 16 / 10;
+  }
+  .placeholder span {
+    display: none;
+  }
+}
+
+@media (max-width: 820px) and (orientation: portrait) {
+  .stage {
+    grid-template-rows: auto auto;
+    align-content: start;
+  }
+  .mainSlot {
+    aspect-ratio: 16 / 9;
+  }
+}
+
+// Portrait phones: one scrolling column, main first. Every window gets a usable size.
+@media (max-width: 600px) and (orientation: portrait) {
+  .stage {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+    grid-auto-rows: auto;
+    grid-template-areas:
+      'main'
+      'side1'
+      'side2'
+      'side3';
+  }
+  .sideSlot {
+    aspect-ratio: 16 / 9;
+  }
+  .placeholder span {
+    display: inline;
+  }
+}

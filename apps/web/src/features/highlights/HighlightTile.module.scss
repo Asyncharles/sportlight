@@ -1,0 +1,147 @@
+.tile {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--video-bg);
+  color: var(--on-video);
+  text-decoration: none;
+  isolation: isolate;
+  animation: appear var(--dur-slow) var(--ease-out);
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--scrim);
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  &:focus-visible {
+    outline-offset: 2px;
+  }
+}
+
+@keyframes appear {
+  from {
+    opacity: 0;
+  }
+}
+
+.thumb,
+.preview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform var(--dur-slow) var(--ease);
+}
+
+.tile:hover .thumb {
+  transform: scale(1.03);
+}
+
+.preview {
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease);
+}
+
+.previewShown {
+  opacity: 1;
+}
+
+.peak {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--glass);
+  backdrop-filter: blur(6px);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.meta {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 13px;
+  min-width: 0;
+
+  span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  svg {
+    flex: none;
+  }
+}
+
+.detail {
+  display: flex;
+  gap: 10px;
+  color: var(--on-video-muted);
+  font-size: 11px;
+}
+
+.small {
+  .meta {
+    padding: 8px 10px;
+  }
+  .title {
+    font-size: 12px;
+  }
+}
+
+.medium {
+  .title {
+    font-size: 15px;
+  }
+  .detail {
+    font-size: 12px;
+  }
+  .peak {
+    font-size: 13px;
+  }
+}
+
+.large {
+  .meta {
+    padding: 16px 18px;
+    gap: 4px;
+  }
+  .title {
+    font-size: 19px;
+  }
+  .detail {
+    font-size: 13px;
+  }
+  .peak {
+    top: 12px;
+    right: 12px;
+    padding: 5px 10px;
+    font-size: 15px;
+    background: var(--sl-lime);
+    color: var(--sl-ink);
+  }
+}

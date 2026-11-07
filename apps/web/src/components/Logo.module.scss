@@ -1,0 +1,25 @@
+.logo {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  overflow: hidden;
+
+  img {
+    position: absolute;
+    max-width: none;
+    user-select: none;
+  }
+}
+
+.dark {
+  display: none;
+}
+
+:global([data-theme='dark']) {
+  .light {
+    display: none;
+  }
+  .dark {
+    display: block;
+  }
+}
