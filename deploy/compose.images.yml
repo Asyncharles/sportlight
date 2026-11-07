@@ -1,0 +1,6 @@
+# CI only (images.yml): gives each built service its Artifact Registry name.
+services:
+  media:     { image: "${AR_REPO}/sportlight-media:${IMAGE_TAG}" }
+  backend:   { image: "${AR_REPO}/sportlight-backend:${IMAGE_TAG}" }
+  publisher: { image: "${AR_REPO}/sportlight-publisher:${IMAGE_TAG}" }
+  web:       { image: "${AR_REPO}/sportlight-web:${IMAGE_TAG}" }

@@ -1,0 +1,85 @@
+# Builds the four images on the GitHub runner (small Node/nginx images, unlike the
+# CUDA engine) and pushes them to Artifact Registry tagged with the git SHA.
+# The media image (slow: downloads and transcodes replays) is rebuilt only when its
+# sources change; otherwise the existing image is re-tagged.
+name: images
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      rebuild_media:
+        description: Rebuild the media image even if its sources are unchanged
+        type: boolean
+        default: false
+
+permissions: {}
+
+concurrency:
+  group: image-main
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AR_REPO: ${{ vars.AR_REPO }}
+      IMAGE_TAG: ${{ github.sha }}
+      MEDIA_PATHS: media             # every repo path the media image is built from
+      AMQP_URL: amqp://ci:ci@broker.invalid:5672/ci   # keeps compose interpolation happy
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          project_id: ${{ vars.GCP_PROJECT }}
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_CI_SA }}
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+      - name: Docker login to Artifact Registry
+        run: gcloud auth configure-docker "${AR_REPO%%/*}" --quiet
+
+      - name: Does media need rebuilding?
+        id: media
+        env:
+          FORCE: ${{ inputs.rebuild_media }}
+        run: |
+          key=$(for p in $MEDIA_PATHS; do git rev-parse "HEAD:$p"; done | sha256sum | cut -c1-16)
+          rebuild=true
+          if [[ "$FORCE" != true ]] && gcloud artifacts docker images describe \
+               "$AR_REPO/sportlight-media:src-$key" >/dev/null 2>&1; then
+            rebuild=false
+          fi
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+          echo "rebuild=$rebuild" >> "$GITHUB_OUTPUT"
+          echo "media sources $key, rebuild=$rebuild"
+
+      - name: Build and push
+        env:
+          REBUILD_MEDIA: ${{ steps.media.outputs.rebuild }}
+          KEY: ${{ steps.media.outputs.key }}
+        run: |
+          compose() { docker compose -f docker-compose.yml -f deploy/compose.images.yml "$@"; }
+          svcs="backend publisher web"
+          [[ "$REBUILD_MEDIA" == true ]] && svcs="media $svcs"
+          compose build $svcs
+          compose push $svcs
+          if [[ "$REBUILD_MEDIA" == true ]]; then
+            gcloud artifacts docker tags add "$AR_REPO/sportlight-media:$IMAGE_TAG" "$AR_REPO/sportlight-media:src-$KEY" --quiet
+          else
+            gcloud artifacts docker tags add "$AR_REPO/sportlight-media:src-$KEY" "$AR_REPO/sportlight-media:$IMAGE_TAG" --quiet
+          fi
+
+      - name: Summary
+        run: |
+          echo "### Images for \`$IMAGE_TAG\`" >> "$GITHUB_STEP_SUMMARY"
+          for i in media backend publisher web; do
+            gcloud artifacts docker images describe "$AR_REPO/sportlight-$i:$IMAGE_TAG" \
+              --format='value(image_summary.fully_qualified_digest)' | sed 's/^/- /' >> "$GITHUB_STEP_SUMMARY"
+          done

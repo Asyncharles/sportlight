@@ -1,0 +1,32 @@
+# Manual deploy of the web stack to si-web through the engine repo's reusable workflow.
+# Environment `demo`: Charles approves; after DEMO_FREEZE_AT it also needs freeze_override.
+name: deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Full git SHA of built images (blank = the commit this run is on)
+        required: false
+      freeze_override:
+        description: Deploy even though the demo freeze has started
+        type: boolean
+        default: false
+
+permissions: {}
+
+jobs:
+  deploy:
+    permissions:
+      contents: read
+      id-token: write
+    # Pin to a commit SHA instead of @main once it settles.
+    uses: Morgs27/sports-intensity/.github/workflows/deploy-reusable.yml@main
+    with:
+      app: sportlight-web
+      vm: si-web
+      environment: demo
+      image_tag: ${{ inputs.image_tag || github.sha }}
+      freeze_override: ${{ inputs.freeze_override }}
+      images: sportlight-media sportlight-backend sportlight-publisher sportlight-web
+      release_paths: docker-compose.yml docker-compose.external.yml docker
