@@ -1,0 +1,46 @@
+@font-face {
+    font-family: Manrope;
+    src: url("fonts/Manrope.woff") format("woff");
+    font-weight: 200 800;
+    font-display: swap
+}
+
+@font-face {
+    font-family: "IBM Plex Mono";
+    src: url("fonts/IBMPlexMono-Regular.woff") format("woff");
+    font-weight: 400;
+    font-display: swap
+}
+
+:root {
+    --sl-ink: #171917;
+    --sl-lime: #C5FF00;
+    --sl-paper: #F7F8F4;
+    --sl-muted: #62685F;
+    --sl-border: #DDE1D7;
+    --sl-surface: #222620;
+    --sl-font: Manrope, Arial, sans-serif;
+    --sl-mono: "IBM Plex Mono", monospace;
+    --sl-radius: 12px;
+    --sl-space: 8px
+}
+
+body {
+    font-family: var(--sl-font);
+    color: var(--sl-ink);
+    background: var(--sl-paper)
+}
+
+.sl-button {
+    background: var(--sl-lime);
+    color: var(--sl-ink);
+    border: 0;
+    border-radius: 999px;
+    padding: 12px 24px;
+    font: 600 14px var(--sl-font)
+}
+
+.sl-score {
+    font-family: var(--sl-mono);
+    font-variant-numeric: tabular-nums
+}
