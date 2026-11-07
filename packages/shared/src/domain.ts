@@ -58,6 +58,15 @@ export interface EventInfo {
   competitionId?: CompetitionId;
   teamIds?: TeamId[];
   venue?: string;
+  /** Rights holder / channel carrying the stream, e.g. Sky Sports · Sky Sports Football. */
+  broadcaster?: Broadcaster;
+}
+
+export interface Broadcaster {
+  /** Network, e.g. "Sky Sports". */
+  name: string;
+  /** Channel, e.g. "Sky Sports Football". */
+  channel?: string;
 }
 
 /**

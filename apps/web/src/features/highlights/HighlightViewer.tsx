@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Sparkles, X } from 'lucide-react';
 import { DEFAULT_HIGHLIGHT_CONFIG, getCompetition, getSport, matchesFollows, type Highlight } from '@sportlight/shared';
 import { SportIcon } from '../../components/SportIcon';
 import { apiUrl, mediaUrl } from '../../lib/env';
 import { formatDuration, formatTimeOfDay } from '../../lib/format';
-import { useHighlights } from '../../lib/highlights';
+import { highlightTitle, isModelCaption, showsEventSeparately, useHighlights } from '../../lib/highlights';
 import { useLive } from '../../lib/live-client';
 import { usePreferences } from '../../lib/preferences';
 import { ClipPlayer } from './ClipPlayer';
@@ -106,8 +106,18 @@ export function HighlightViewer() {
               {getSport(current.sportId)?.name}
               {competition && <span> · {competition.name}</span>}
             </p>
-            <h1 className={styles.title}>{current.event.title}</h1>
-            {current.event.subtitle && <p className={styles.subtitle}>{current.event.subtitle}</p>}
+            <h1 className={styles.title}>{highlightTitle(current)}</h1>
+            {current.caption?.description && <p className={styles.description}>{current.caption.description}</p>}
+            <p className={styles.subtitle}>
+              {[showsEventSeparately(current) ? current.event.title : null, current.event.subtitle, current.event.broadcaster?.channel]
+                .filter(Boolean)
+                .join(' · ')}
+              {isModelCaption(current) && (
+                <span className={styles.aiTag} title={`Named and described by ${current.caption!.model}`}>
+                  <Sparkles size={11} strokeWidth={2.25} /> AI caption
+                </span>
+              )}
+            </p>
           </div>
           <dl className={styles.stats}>
             <div>
@@ -148,9 +158,10 @@ export function HighlightViewer() {
                   <span className={`${styles.itemDur} mono`}>{formatDuration(h.clip.durationSec)}</span>
                 </span>
                 <span className={styles.itemMeta}>
-                  <span className={styles.itemTitle}>{h.event.title}</span>
+                  <span className={styles.itemTitle}>{highlightTitle(h)}</span>
                   <span className={styles.itemSub}>
                     <SportIcon sportId={h.sportId} size={12} strokeWidth={2.25} />
+                    {showsEventSeparately(h) && <span className={styles.itemEvent}>{h.event.title}</span>}
                     <span className="mono">{formatTimeOfDay(h.peak.at, timezone ?? undefined)}</span>
                   </span>
                 </span>

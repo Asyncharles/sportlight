@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ExternalLink, Monitor, Moon, Sun } from 'lucide-react';
-import { SportPicker } from '../../components/SportPicker';
+import { ChevronRight, ExternalLink, Monitor, Moon, Sun } from 'lucide-react';
+import { SPORTS, type SportId } from '@sportlight/shared';
 import { mediaUrl } from '../../lib/env';
 import { useLive } from '../../lib/live-client';
-import { usePreferences, type MotionPreference, type ThemePreference } from '../../lib/preferences';
+import { COLOUR_THEMES, usePreferences, type MotionPreference, type ThemePreference } from '../../lib/preferences';
+import { Row, Segmented } from './controls';
+import { LiveSettings } from './LiveSettings';
 import styles from './Settings.module.scss';
 
 interface Credit {
@@ -16,9 +18,8 @@ interface Credit {
 }
 
 export function Settings() {
-  const { prefs, sports, update, setSports, reset } = usePreferences();
-  const { feeds, status } = useLive();
-  const feedList = useMemo(() => Object.values(feeds), [feeds]);
+  const { prefs, sports, update, reset } = usePreferences();
+  const { status } = useLive();
   const navigate = useNavigate();
   const { hash } = useLocation();
 
@@ -46,6 +47,23 @@ export function Settings() {
             ]}
           />
         </Row>
+        <Row label="Colour theme" hint="Choose your primary colour. Works in light and dark mode.">
+          <div className={styles.colours} role="group" aria-label="Colour theme">
+            {COLOUR_THEMES.map((theme) => (
+              <button
+                key={theme.value}
+                type="button"
+                data-colour={theme.value}
+                aria-pressed={prefs.colour === theme.value}
+                className={styles.colourOption}
+                onClick={() => update({ colour: theme.value })}
+              >
+                <span className={styles.swatch} aria-hidden="true" />
+                {theme.label}
+              </button>
+            ))}
+          </div>
+        </Row>
         <Row label="Motion" hint="Reduce animation everywhere. Sportlight also follows your device setting.">
           <Segmented<MotionPreference>
             label="Motion"
@@ -59,15 +77,20 @@ export function Settings() {
         </Row>
       </section>
 
+      <LiveSettings />
+
       <section className={styles.section} aria-labelledby="sports">
-        <div className={styles.sectionHead}>
-          <h2 id="sports" className={styles.heading}>
-            Your sports
-          </h2>
-          <span className={styles.meta}>Changes apply immediately</span>
-        </div>
-        <SportPicker selected={sports} onChange={setSports} feeds={feedList} />
-        {sports.length === 0 && <p className={styles.warn}>Select at least one sport to see live feeds.</p>}
+        <h2 id="sports" className={styles.heading}>
+          Your sports
+        </h2>
+        <Row
+          label={sports.length ? sportNames(sports) : 'No sports selected'}
+          hint={`${sports.length} of ${SPORTS.length} followed`}
+        >
+          <Link to="/settings/sports" className="sl-button small secondary">
+            Manage <ChevronRight size={15} />
+          </Link>
+        </Row>
       </section>
 
       <section className={styles.section} aria-labelledby="about">
@@ -79,8 +102,15 @@ export function Settings() {
             Stream admin
           </Link>
         </Row>
-        <Row label="Welcome tour" hint="See the introduction again.">
-          <button type="button" className="sl-button small secondary" onClick={() => navigate('/welcome')}>
+        <Row label="Tour" hint="Choose your sports and see the live page tour again.">
+          <button
+            type="button"
+            className="sl-button small secondary"
+            onClick={() => {
+              update({ onboarded: false });
+              navigate('/live');
+            }}
+          >
             Replay
           </button>
         </Row>
@@ -91,7 +121,7 @@ export function Settings() {
             onClick={() => {
               if (confirm('Reset Sportlight on this device?')) {
                 reset();
-                navigate('/welcome', { replace: true });
+                navigate('/', { replace: true });
               }
             }}
           >
@@ -104,49 +134,12 @@ export function Settings() {
   );
 }
 
-function Row({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <div className={styles.row}>
-      <div>
-        <div className={styles.label}>{label}</div>
-        {hint && <div className={styles.hint}>{hint}</div>}
-      </div>
-      <div>{children}</div>
-    </div>
-  );
+function sportNames(ids: SportId[]) {
+  const names = SPORTS.filter((s) => ids.includes(s.id)).map((s) => s.name);
+  return names.length > 3 ? `${names.slice(0, 3).join(', ')} +${names.length - 3}` : names.join(', ');
 }
 
-function Segmented<T extends string>({
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  label: string;
-  value: T;
-  onChange: (v: T) => void;
-  options: Array<{ value: T; label: string; icon?: React.ReactNode }>;
-}) {
-  return (
-    <div className={styles.segmented} role="radiogroup" aria-label={label}>
-      {options.map((o) => (
-        <button
-          key={o.value}
-          type="button"
-          role="radio"
-          aria-checked={value === o.value}
-          className={value === o.value ? styles.segOn : undefined}
-          onClick={() => onChange(o.value)}
-        >
-          {o.icon}
-          {o.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-/** Attribution for the openly licensed demo footage (required by CC BY / BY-SA). */
+/** Source attribution for the local demo replays. */
 function Credits() {
   const [credits, setCredits] = useState<Array<{ id: string; credits: Credit[]; synthetic: boolean }> | null>(null);
   useEffect(() => {
@@ -185,7 +178,7 @@ function Credits() {
           ))}
         </ul>
       )}
-      <p className={styles.hint}>Footage via Wikimedia Commons, trimmed and re-encoded for this demo.</p>
+      <p className={styles.hint}>Full broadcast replays from YouTube, played locally at normal speed.</p>
     </details>
   );
 }

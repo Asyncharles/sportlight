@@ -1,0 +1,377 @@
+// Switch animations, shared by the live stage and the Settings previews.
+//
+// Markup per window:
+//   .sl-fx-layer[data-fx=<style>]           positioned window (owns translate/size)
+//     .sl-fx                                animation target (scale/rotate/clip; never translate)
+//       …video tile…
+//     .sl-fx-overlay                        decorative layer (ring / stinger band), not clipped
+//
+// State classes on .sl-fx-layer:
+//   .is-entering  the window's feed is being revealed (runs once when added)
+//   .is-exiting   the window's feed is being replaced (stays at its end state until removed)
+//   .is-moving-a / .is-moving-b  the feed is travelling to another window (alternate to restart)
+//
+// Durations come from --fx-reveal / --fx-move (set from JS so the stage logic and CSS agree).
+
+@property --fx-x {
+  syntax: '<percentage>';
+  inherits: true;
+  initial-value: 120%;
+}
+
+@property --fx-r {
+  syntax: '<percentage>';
+  inherits: true;
+  initial-value: 150%;
+}
+
+.sl-fx-layer {
+  --fx-reveal: 760ms;
+  --fx-move: 560ms;
+  --fx-ox: calc(100% - 34px);
+  --fx-oy: 22px;
+}
+
+.sl-fx {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  transform-origin: 50% 50%;
+  backface-visibility: hidden;
+}
+
+.sl-fx-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  overflow: hidden;
+  z-index: 5;
+}
+
+// ---------------------------------------------------------------- spotlight
+// The incoming feed irises open from its intensity badge, edged by a lime ring of light; the
+// outgoing one dims into the dark beneath it. Moving feeds lift, flare and settle.
+
+.sl-fx-layer[data-fx='spotlight'] {
+  &.is-entering > .sl-fx {
+    animation: sl-spot-iris var(--fx-reveal) cubic-bezier(0.65, 0, 0.2, 1) both;
+  }
+  &.is-entering > .sl-fx-overlay::before {
+    content: '';
+    position: absolute;
+    left: var(--fx-ox);
+    top: var(--fx-oy);
+    width: 0;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    box-shadow:
+      0 0 0 2px var(--sl-lime),
+      0 0 24px 6px color-mix(in srgb, var(--sl-lime) 70%, transparent),
+      inset 0 0 30px 4px color-mix(in srgb, var(--sl-lime) 55%, transparent);
+    transform: translate(-50%, -50%);
+    animation: sl-spot-ring var(--fx-reveal) cubic-bezier(0.65, 0, 0.2, 1) both;
+  }
+  &.is-entering > .sl-fx-overlay::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(
+      circle at var(--fx-ox) var(--fx-oy),
+      color-mix(in srgb, var(--sl-lime) 55%, transparent),
+      transparent 60%
+    );
+    mix-blend-mode: screen;
+    animation: sl-spot-flash var(--fx-reveal) ease-out both;
+  }
+  &.is-exiting > .sl-fx {
+    animation: sl-spot-dim var(--fx-reveal) cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+  &.is-moving-a > .sl-fx {
+    animation: sl-spot-lift-a var(--fx-move) cubic-bezier(0.3, 0, 0.2, 1);
+  }
+  &.is-moving-b > .sl-fx {
+    animation: sl-spot-lift-b var(--fx-move) cubic-bezier(0.3, 0, 0.2, 1);
+  }
+}
+
+@keyframes sl-spot-iris {
+  0% {
+    clip-path: circle(0% at var(--fx-ox) var(--fx-oy));
+    filter: brightness(1.9) saturate(1.4);
+  }
+  55% {
+    filter: brightness(1.25) saturate(1.15);
+  }
+  100% {
+    clip-path: circle(150% at var(--fx-ox) var(--fx-oy));
+    filter: none;
+  }
+}
+
+@keyframes sl-spot-ring {
+  0% {
+    width: 0;
+    opacity: 1;
+  }
+  75% {
+    opacity: 0.9;
+  }
+  100% {
+    width: 250%;
+    opacity: 0;
+  }
+}
+
+@keyframes sl-spot-flash {
+  0% {
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes sl-spot-dim {
+  to {
+    filter: brightness(0.25) saturate(0.6) blur(3px);
+    transform: scale(0.96);
+  }
+}
+
+@mixin spot-lift {
+  0% {
+    transform: none;
+    filter: none;
+  }
+  35% {
+    transform: scale(0.94);
+    filter: brightness(1.15);
+    box-shadow:
+      0 0 0 2px var(--sl-lime),
+      0 0 32px 4px color-mix(in srgb, var(--sl-lime) 45%, transparent),
+      0 24px 48px rgba(0, 0, 0, 0.45);
+  }
+  100% {
+    transform: none;
+    filter: none;
+    box-shadow: none;
+  }
+}
+@keyframes sl-spot-lift-a {
+  @include spot-lift;
+}
+@keyframes sl-spot-lift-b {
+  @include spot-lift;
+}
+
+// ---------------------------------------------------------------- stinger
+// A broadcast replay wipe: a skewed lime slab carrying the Sportlight mark sweeps across; the new
+// feed is revealed exactly along its trailing edge.
+
+.sl-fx-layer[data-fx='stinger'] {
+  &.is-entering > .sl-fx {
+    clip-path: polygon(0 0, calc(var(--fx-x) + 10%) 0, calc(var(--fx-x) - 10%) 100%, 0 100%);
+    animation: sl-sting-x var(--fx-reveal) cubic-bezier(0.7, 0, 0.25, 1) both;
+  }
+  &.is-entering > .sl-fx-overlay,
+  &.is-moving-a > .sl-fx-overlay,
+  &.is-moving-b > .sl-fx-overlay {
+    animation: sl-sting-x var(--fx-reveal) cubic-bezier(0.7, 0, 0.25, 1) both;
+  }
+  &.is-moving-b > .sl-fx-overlay {
+    animation-name: sl-sting-x-b;
+  }
+  &.is-entering > .sl-fx-overlay .sl-sting,
+  &.is-moving-a > .sl-fx-overlay .sl-sting,
+  &.is-moving-b > .sl-fx-overlay .sl-sting {
+    display: flex;
+  }
+  &.is-exiting > .sl-fx {
+    animation: sl-sting-push var(--fx-reveal) cubic-bezier(0.7, 0, 0.25, 1) forwards;
+  }
+}
+
+.sl-sting {
+  display: none;
+  position: absolute;
+  top: -10%;
+  bottom: -10%;
+  left: calc(var(--fx-x) - 9%);
+  width: 34%;
+  align-items: center;
+  justify-content: center;
+  transform: translateX(-50%) skewX(-12deg);
+  background: var(--sl-lime);
+  color: var(--sl-ink);
+  box-shadow:
+    -14px 0 0 0 var(--sl-ink),
+    -18px 0 0 0 var(--sl-lime),
+    0 0 40px 6px color-mix(in srgb, var(--sl-lime) 40%, transparent);
+
+  > svg {
+    transform: skewX(12deg);
+    width: 42%;
+    max-width: 96px;
+    height: auto;
+  }
+}
+
+@keyframes sl-sting-x {
+  from {
+    --fx-x: -30%;
+  }
+  to {
+    --fx-x: 135%;
+  }
+}
+@keyframes sl-sting-x-b {
+  from {
+    --fx-x: -30%;
+  }
+  to {
+    --fx-x: 135%;
+  }
+}
+
+@keyframes sl-sting-push {
+  0%,
+  30% {
+    transform: none;
+    filter: none;
+  }
+  100% {
+    transform: translateX(6%) scale(1.04);
+    filter: brightness(0.6) blur(2px);
+  }
+}
+
+// ---------------------------------------------------------------- flip
+// Windows turn over like cards: the outgoing feed rotates away, the incoming one lands with a
+// little overshoot and a lime sheen across its face. Moving feeds tilt in flight.
+
+.sl-fx-layer[data-fx='flip'] {
+  perspective: 1400px;
+
+  &.is-entering > .sl-fx {
+    animation: sl-flip-in var(--fx-reveal) cubic-bezier(0.3, 0, 0.2, 1) both;
+  }
+  &.is-entering > .sl-fx-overlay::after {
+    content: '';
+    position: absolute;
+    inset: -20%;
+    background: linear-gradient(
+      105deg,
+      transparent 35%,
+      color-mix(in srgb, var(--sl-lime) 60%, transparent) 50%,
+      transparent 65%
+    );
+    mix-blend-mode: screen;
+    animation: sl-flip-sheen var(--fx-reveal) ease-out both;
+  }
+  &.is-exiting > .sl-fx {
+    animation: sl-flip-out var(--fx-reveal) cubic-bezier(0.5, 0, 0.75, 0) forwards;
+  }
+  &.is-moving-a > .sl-fx {
+    animation: sl-flip-tilt-a var(--fx-move) cubic-bezier(0.3, 0, 0.2, 1);
+  }
+  &.is-moving-b > .sl-fx {
+    animation: sl-flip-tilt-b var(--fx-move) cubic-bezier(0.3, 0, 0.2, 1);
+  }
+}
+
+@keyframes sl-flip-in {
+  0%,
+  45% {
+    transform: rotateY(-90deg) scale(0.92);
+    filter: brightness(0.5);
+  }
+  80% {
+    transform: rotateY(7deg) scale(1.01);
+    filter: brightness(1.1);
+  }
+  100% {
+    transform: none;
+    filter: none;
+  }
+}
+
+@keyframes sl-flip-out {
+  0% {
+    transform: none;
+    filter: none;
+  }
+  45%,
+  100% {
+    transform: rotateY(90deg) scale(0.92);
+    filter: brightness(0.4);
+  }
+}
+
+@keyframes sl-flip-sheen {
+  0%,
+  50% {
+    transform: translateX(-70%);
+    opacity: 0;
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(70%);
+    opacity: 0;
+  }
+}
+
+@mixin flip-tilt {
+  0% {
+    transform: none;
+  }
+  40% {
+    transform: rotateY(-22deg) rotateX(4deg) scale(0.9);
+    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.45);
+  }
+  100% {
+    transform: none;
+  }
+}
+@keyframes sl-flip-tilt-a {
+  @include flip-tilt;
+}
+@keyframes sl-flip-tilt-b {
+  @include flip-tilt;
+}
+
+// ---------------------------------------------------------------- reduced motion: plain crossfade
+
+[data-motion='reduce'] .sl-fx-layer,
+.sl-fx-layer[data-fx='none'] {
+  > .sl-fx,
+  > .sl-fx-overlay,
+  > .sl-fx-overlay::before,
+  > .sl-fx-overlay::after {
+    animation: none !important;
+    clip-path: none !important;
+  }
+  .sl-sting {
+    display: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion='full']) .sl-fx-layer {
+    > .sl-fx,
+    > .sl-fx-overlay,
+    > .sl-fx-overlay::before,
+    > .sl-fx-overlay::after {
+      animation: none !important;
+      clip-path: none !important;
+    }
+    .sl-sting {
+      display: none !important;
+    }
+  }
+}

@@ -1,8 +1,10 @@
+import { writeFileSync, renameSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
   dayKey,
+  type HighlightCaption,
   fitClipToMedia,
   mediaTimeAt,
   thumbnailUrlAt,
@@ -43,6 +45,9 @@ export class HighlightStore {
     private readonly config: HighlightConfig,
     private readonly log: Logger,
     private readonly persist = true,
+    /** Names a new or changed highlight; receives the caption of the highlight it replaces. */
+    private readonly nameHighlight: (h: Highlight, previous?: HighlightCaption) => HighlightCaption | undefined = () =>
+      undefined,
   ) {
     this.dir = join(dataDir, 'highlights');
   }
@@ -84,6 +89,9 @@ export class HighlightStore {
       moment,
     );
     const highlight = this.build(merged, feed, day, samples);
+    const previous = mergeWith.find((h) => h.id === highlight.id) ?? mergeWith[0];
+    const caption = this.nameHighlight(highlight, previous?.caption);
+    if (caption) highlight.caption = caption;
 
     // 2. Same footage already covered by another clip? Keep whichever peaked higher.
     const conflicts = this.config.dedupeByMedia
@@ -112,6 +120,23 @@ export class HighlightStore {
     changes.removed = changes.removed.filter((id) => !dayMap.has(id));
     this.markDirty(day);
     return changes;
+  }
+
+  /** Attach a (model-written) caption. Returns the updated highlight, if it still exists. */
+  setCaption(id: string, caption: HighlightCaption): Highlight | undefined {
+    for (const [day, m] of this.byDay) {
+      const h = m.get(id);
+      if (!h) continue;
+      const next = { ...h, caption };
+      m.set(id, next);
+      this.markDirty(day);
+      return next;
+    }
+    return undefined;
+  }
+
+  all(): Highlight[] {
+    return [...this.byDay.values()].flatMap((m) => [...m.values()]);
   }
 
   list(day: string): Highlight[] {
@@ -204,8 +229,10 @@ export class HighlightStore {
   }
 
   private markDirty(day: string) {
-    this.dirty.add(day);
-    if (!this.flushTimer) this.flushTimer = setTimeout(() => void this.flush(), 2_000);
+    if (!this.persist) return;
+    const file = join(this.dir, `${day}.json`);
+    writeFileSync(`${file}.tmp`, JSON.stringify(this.list(day)), { flush: true });
+    renameSync(`${file}.tmp`, file);
   }
 }
 

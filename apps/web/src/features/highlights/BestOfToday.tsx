@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowUp, SlidersHorizontal, Sparkles } from 'lucide-react';
-import { assignTiers, matchesFollows, type HighlightTier } from '@sportlight/shared';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { ArrowUp, Sparkles } from 'lucide-react';
+import { assignTiers, SPORTS, type HighlightTier } from '@sportlight/shared';
+import { matchesBestFilter, useBestUi } from '../../lib/best-ui';
 import { useHighlights } from '../../lib/highlights';
 import { formatDay } from '../../lib/format';
 import { usePreferences } from '../../lib/preferences';
@@ -14,12 +14,13 @@ import styles from './BestOfToday.module.scss';
  */
 export function BestOfToday() {
   const { highlights, day, timezone, status } = useHighlights();
-  const { prefs, sports } = usePreferences();
-  const [allSports, setAllSports] = useState(false);
+  const { prefs } = usePreferences();
+  const { sports, setSports } = useBestUi();
+  const allSports = sports?.length === SPORTS.length;
 
   const filtered = useMemo(
-    () => (allSports ? highlights : highlights.filter((h) => matchesFollows(h, prefs.follows))),
-    [highlights, prefs.follows, allSports],
+    () => highlights.filter((h) => matchesBestFilter(h, sports, prefs.follows)),
+    [highlights, prefs.follows, sports],
   );
 
   // Freeze the visible set; surface new arrivals without moving tiles around.
@@ -32,7 +33,7 @@ export function BestOfToday() {
       setShownIds(new Set(filtered.map((h) => h.id)));
     }
   }, [status, filtered, shownIds]);
-  useEffect(() => setShownIds(null), [allSports, prefs.follows]);
+  useEffect(() => setShownIds(null), [sports, prefs.follows]);
 
   const visible = useMemo(
     () => (shownIds ? filtered.filter((h) => shownIds.has(h.id)) : filtered),
@@ -47,36 +48,9 @@ export function BestOfToday() {
 
   return (
     <main className={styles.page}>
-      <div className={styles.head}>
-        <div>
-          <h1 className={styles.title}>Best of Today</h1>
-          <p className={styles.sub}>
-            {day ? formatDay(day) : 'Today'}
-            {visible.length > 0 && ` · ${visible.length} ${visible.length === 1 ? 'moment' : 'moments'}`}
-          </p>
-        </div>
-        <div className={styles.filters} role="group" aria-label="Filter">
-          <button
-            type="button"
-            className={`${styles.chip} ${!allSports ? styles.chipOn : ''}`}
-            aria-pressed={!allSports}
-            onClick={() => setAllSports(false)}
-          >
-            Your sports · {sports.length}
-          </button>
-          <button
-            type="button"
-            className={`${styles.chip} ${allSports ? styles.chipOn : ''}`}
-            aria-pressed={allSports}
-            onClick={() => setAllSports(true)}
-          >
-            All sports
-          </button>
-          <Link to="/settings#sports" className={styles.iconChip} aria-label="Edit your sports">
-            <SlidersHorizontal size={15} />
-          </Link>
-        </div>
-      </div>
+      <h1 className="sr-only">
+        Best of Today{day ? `, ${formatDay(day)}` : ''}
+      </h1>
 
       {pending > 0 && (
         <button type="button" className={styles.newPill} onClick={showNew}>
@@ -100,19 +74,19 @@ export function BestOfToday() {
             {status === 'error'
               ? 'We’ll retry when the connection comes back.'
               : !allSports && highlights.length > 0
-                ? `${highlights.length} ${highlights.length === 1 ? 'moment' : 'moments'} in other sports.`
+                ? `${highlights.length} ${highlights.length === 1 ? 'moment' : 'moments'} outside this filter.`
                 : 'Moments appear here as soon as live intensity peaks.'}
           </p>
           {!allSports && highlights.length > 0 && (
-            <button type="button" className="sl-button small secondary" onClick={() => setAllSports(true)}>
+            <button type="button" className="sl-button small secondary" onClick={() => setSports(SPORTS.map((s) => s.id))}>
               Show all sports
             </button>
           )}
         </div>
       ) : (
         <ul className={styles.grid}>
-          {visible.map((h) => (
-            <li key={h.id} className={tierClass(tiers.get(h.id))}>
+          {visible.map((h, index) => (
+            <li key={h.id} className={tierClass(tiers.get(h.id))} style={{ '--reveal-delay': `${Math.min(index, 8) * 55}ms` } as CSSProperties}>
               <HighlightTile highlight={h} tier={tiers.get(h.id) ?? 'small'} timezone={timezone ?? undefined} />
             </li>
           ))}

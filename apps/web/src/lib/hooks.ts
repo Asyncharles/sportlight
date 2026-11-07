@@ -49,3 +49,15 @@ export function useDocumentVisible(): boolean {
     () => true,
   );
 }
+
+/** The applied colour theme (`data-theme` on <html>, set by useApplyAppearance). */
+export function useResolvedTheme(): 'light' | 'dark' {
+  const read = (): 'light' | 'dark' => (document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
+  const [theme, setTheme] = useState(read);
+  useEffect(() => {
+    const obs = new MutationObserver(() => setTheme(read()));
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => obs.disconnect();
+  }, []);
+  return theme;
+}

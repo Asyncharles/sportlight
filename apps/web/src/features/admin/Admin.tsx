@@ -5,6 +5,7 @@ import { SportIcon } from '../../components/SportIcon';
 import { apiUrl } from '../../lib/env';
 import { formatAge, formatDuration } from '../../lib/format';
 import { useDocumentVisible } from '../../lib/hooks';
+import { ContentOverview } from './ContentOverview';
 import { Sparkline } from './Sparkline';
 import styles from './Admin.module.scss';
 
@@ -21,6 +22,21 @@ export function Admin() {
   const [showEnded, setShowEnded] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
   const visible = useDocumentVisible();
+  const [storageMessage, setStorageMessage] = useState('');
+  const [clearing, setClearing] = useState(false);
+  async function clearStorage() {
+    if (!window.confirm('Delete history and highlight archive files older than 7 days? Recent data and publishing jobs will be kept.')) return;
+    setClearing(true);
+    try {
+      const response = await fetch(apiUrl('/api/admin/storage/clear'), {
+        method: 'POST', headers: { 'X-Sportlight-Action': 'clear-archived-storage', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const result = await response.json() as { files: number; bytes: number };
+      setStorageMessage(`Cleared ${result.files} files (${(result.bytes / 1048576).toFixed(1)} MB).`);
+    } catch (error) { setStorageMessage(`Cleanup failed: ${(error as Error).message}`); }
+    finally { setClearing(false); }
+  }
 
   useEffect(() => {
     if (paused || !visible || needsToken) return;
@@ -93,9 +109,18 @@ export function Admin() {
 
   return (
     <main className={styles.page}>
-      <div className={styles.head}>
+      <section className={styles.section}>
+        <h2>Storage</h2>
+        <p>Clear history and highlight archive files older than 7 days. Recent data, publishing jobs and videos are kept.</p>
+        <button className="sl-button small" disabled={clearing} onClick={() => void clearStorage()}>{clearing ? 'Clearing…' : 'Clear old archives'}</button>
+        <p role="status">{storageMessage}</p>
+      </section>
+      <section className={styles.section} aria-labelledby="streams-heading">
+      <div className={styles.sectionHead}>
         <div>
-          <h1 className={styles.title}>Streams</h1>
+          <h2 id="streams-heading" className={styles.sectionTitle}>
+            Streams
+          </h2>
           <p className={styles.sub}>
             {error ? (
               <span className={styles.err}>Backend unreachable · {error}</span>
@@ -304,6 +329,10 @@ export function Admin() {
           </table>
         </section>
       )}
+
+      </section>
+
+      <ContentOverview />
 
       {data && (
         <details className={styles.config}>

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark" data-colour="violet">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -14,8 +14,9 @@
       // Apply the saved theme before first paint to avoid a flash.
       try {
         var p = JSON.parse(localStorage.getItem('sportlight.prefs.v1') || '{}');
-        var t = p.theme === 'light' || p.theme === 'dark' ? p.theme : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        var t = p.theme === 'system' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : (p.theme === 'light' ? 'light' : 'dark');
         document.documentElement.dataset.theme = t;
+        document.documentElement.dataset.colour = ['lime', 'blue', 'red', 'yellow', 'orange', 'violet'].includes(p.colour) ? p.colour : 'violet';
       } catch (e) {}
     </script>
   </head>

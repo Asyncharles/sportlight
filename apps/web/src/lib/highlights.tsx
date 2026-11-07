@@ -71,3 +71,18 @@ export function useHighlights(): HighlightsState {
   if (!v) throw new Error('useHighlights outside HighlightsProvider');
   return v;
 }
+
+/** Display name of a highlight: its generated caption, falling back to the event title. */
+export function highlightTitle(h: Highlight): string {
+  return h.caption?.title ?? h.event.title;
+}
+
+/** True when a language model (not the built-in template) wrote the caption. */
+export function isModelCaption(h: Highlight): boolean {
+  return !!h.caption && h.caption.model !== 'template';
+}
+
+/** Whether the event title needs showing alongside the caption (it's not already in it). */
+export function showsEventSeparately(h: Highlight): boolean {
+  return !!h.caption && !h.caption.title.includes(h.event.title);
+}

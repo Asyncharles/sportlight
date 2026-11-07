@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ALL_SLOTS, type FeedState, type SlotId } from '@sportlight/shared';
 
 /**
@@ -25,8 +25,11 @@ export interface StageTile {
   fadeAt: number | null;
   /** Last time the tile changed window (drives stacking during the move). */
   movedAt: number;
+  /** How many times the tile has changed window (restarts the move animation). */
+  moves: number;
 }
 
+/** Default reveal (crossfade) length; animated reveals pass their own. */
 export const FADE_MS = 220;
 /** Reveal an incoming tile anyway after this long (it shows its poster and a spinner). */
 const READY_TIMEOUT_MS = 3500;
@@ -34,8 +37,10 @@ const READY_TIMEOUT_MS = 3500;
 const LEAVE_TIMEOUT_MS = 5000;
 const SETTLE_MS = 40;
 
-export function useStageTiles(assignment: Record<SlotId, FeedState | null>) {
+export function useStageTiles(assignment: Record<SlotId, FeedState | null>, revealMs = FADE_MS) {
   const [tiles, setTiles] = useState<StageTile[]>([]);
+  const reveal = useRef(revealMs);
+  reveal.current = revealMs;
 
   // Reconcile tiles with the slot assignment. The array is append-only, so React never moves
   // existing <video> elements in the DOM (moving them can pause or reset playback).
@@ -61,6 +66,7 @@ export function useStageTiles(assignment: Record<SlotId, FeedState | null>) {
             feed,
             slot,
             movedAt: slot !== t.slot ? now : t.movedAt,
+            moves: slot !== t.slot && !revived ? t.moves + 1 : t.moves,
             phase: revived ? (t.readyAt ? 'present' : 'entering') : t.phase,
             leftAt: revived ? null : t.leftAt,
             fadeAt: revived ? null : t.fadeAt,
@@ -81,6 +87,7 @@ export function useStageTiles(assignment: Record<SlotId, FeedState | null>) {
           leftAt: null,
           fadeAt: null,
           movedAt: 0,
+          moves: 0,
         });
         void feedId;
       }
@@ -102,6 +109,7 @@ export function useStageTiles(assignment: Record<SlotId, FeedState | null>) {
   // Time-based housekeeping: reveal slow loaders, start fades, drop faded tiles.
   useEffect(() => {
     const now = Date.now();
+    const FADE = reveal.current;
     let wakeAt = Infinity;
     let changed = false;
     const next: StageTile[] = [];
@@ -128,7 +136,7 @@ export function useStageTiles(assignment: Record<SlotId, FeedState | null>) {
         if (successor?.phase === 'present' && successor.movedAt < successor.enteredAt + 1 && successor.readyAt) {
           // A new feed is crossfading in on top: keep this one opaque underneath until the
           // crossfade completes (no dimmed midpoint), then drop it — it is fully covered.
-          const coveredAt = successor.readyAt + FADE_MS + SETTLE_MS;
+          const coveredAt = successor.readyAt + FADE + SETTLE_MS;
           if (now >= coveredAt) {
             changed = true;
           } else {

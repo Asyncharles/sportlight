@@ -1,3 +1,4 @@
-.cache/downloads/*.part
+.tools
+.cache
 dist/videos/*.tmp.mp4
 Dockerfile

@@ -101,7 +101,14 @@
   transition:
     background-color var(--dur) var(--ease),
     color var(--dur) var(--ease),
-    opacity var(--dur) var(--ease);
+    opacity var(--dur) var(--ease),
+    box-shadow 900ms var(--ease);
+  box-shadow: 0 0 calc(var(--glow, 0) * 26px) calc(var(--glow, 0) * 3px) color-mix(in srgb, var(--accent) calc(var(--glow, 0) * 90%), transparent);
+
+  svg {
+    flex: none;
+    opacity: 0.9;
+  }
 
   .mono {
     min-width: 2ch;
@@ -116,29 +123,6 @@
 
 .stale {
   opacity: 0.6;
-}
-
-.meter {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 3px;
-  z-index: 3;
-  background: rgba(247, 248, 244, 0.12);
-
-  span {
-    display: block;
-    height: 100%;
-    background: rgba(247, 248, 244, 0.7);
-    transform-origin: left center;
-    transition:
-      transform 600ms var(--ease),
-      background-color var(--dur) var(--ease);
-  }
-  .meterHot {
-    background: var(--sl-lime);
-  }
 }
 
 .title {
@@ -161,11 +145,48 @@
 }
 
 .titleMain {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
   font-weight: 700;
   font-size: 14px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+
+  span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  svg {
+    flex: none;
+  }
+}
+
+.channel {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(247, 248, 244, 0.14);
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--on-video);
+}
+
+.side .subtitle {
+  font-size: 11.5px;
+}
+
+// Inner heat from the stage's exponential --glow: an accent-coloured vignette for the biggest moments.
+.heat {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow: inset 0 0 calc(var(--glow, 0) * 70px) calc(var(--glow, 0) * 6px)
+    color-mix(in srgb, var(--accent) calc(var(--glow, 0) * 45%), transparent);
 }
 
 .main .titleMain {
@@ -180,6 +201,83 @@
 .titleShown {
   opacity: 1;
   transform: none;
+}
+
+// ---------------------------------------------------------------- screen chip & pin
+
+// Pinned: a steady lime frame so held screens read at a glance (the intensity glow sits outside).
+.pinned::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 2px var(--sl-lime);
+  pointer-events: none;
+}
+
+.chip {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  min-width: 24px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--glass);
+  backdrop-filter: blur(8px);
+  color: var(--on-video);
+  font: 650 13px var(--font);
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
+
+  .mono {
+    font-weight: 600;
+  }
+  &:hover {
+    background: rgba(18, 20, 18, 0.85);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--sl-lime);
+    outline-offset: 1px;
+  }
+}
+
+.chipCaret {
+  width: 0;
+  margin-left: -4px;
+  opacity: 0;
+  transition:
+    width var(--dur-fast) var(--ease),
+    margin var(--dur-fast) var(--ease),
+    opacity var(--dur-fast) var(--ease);
+}
+
+.chipPinned {
+  background: var(--sl-lime);
+  color: var(--sl-ink);
+  &:hover {
+    background: var(--accent-hover);
+  }
+}
+
+.chipLocked svg:not(.chipCaret) {
+  opacity: 0.75;
+}
+
+.numbered .title {
+  padding-left: 46px;
+}
+.numbered .titleHeld {
+  padding-left: 62px;
 }
 
 // ---------------------------------------------------------------- controls (hover / focus / touch)
@@ -255,6 +353,11 @@
 }
 
 @mixin reveal {
+  .chipCaret {
+    width: 12px;
+    margin-left: 0;
+    opacity: 0.8;
+  }
   .controls {
     opacity: 1;
     transform: none;

@@ -1,3 +1,6 @@
+@use './switch-fx';
+@use './view-transition';
+
 // Brand fonts (shared with brand.css at the repo root).
 @font-face {
   font-family: Manrope;
@@ -18,7 +21,8 @@
 
 :root {
   --sl-ink: #171917;
-  --sl-lime: #c5ff00;
+  // Legacy components use this token for the selected primary colour.
+  --sl-lime: var(--accent);
   --sl-paper: #f7f8f4;
 
   --font: Manrope, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
@@ -29,6 +33,9 @@
   --radius-lg: 16px;
   --space: 8px;
   --header-h: 56px;
+  --ticker-h: 30px;
+  --ticker-gap: 12px;
+  --top-h: calc(var(--header-h) + var(--ticker-h) + var(--ticker-gap));
   --gutter: 12px;
 
   --dur-fast: 140ms;
@@ -45,11 +52,12 @@
   --scrim-top: linear-gradient(to bottom, rgba(11, 12, 11, 0.6), rgba(11, 12, 11, 0));
   --glass: rgba(18, 20, 18, 0.62);
 
-  --accent: var(--sl-lime);
+  --accent: #c0a0ff;
+  --accent-light-text: #6940b3;
+  --accent-hover: color-mix(in srgb, var(--accent) 78%, white);
   --on-accent: var(--sl-ink);
 }
 
-:root,
 [data-theme='light'] {
   color-scheme: light;
   --bg: var(--sl-paper);
@@ -62,12 +70,13 @@
   --border: #dde1d7;
   --border-strong: #c6ccbf;
   // Lime fails contrast as text on paper; use a deep olive for accent text in light mode.
-  --accent-text: #4a6400;
+  --accent-text: var(--accent-light-text);
   --focus: var(--sl-ink);
   --danger: #b42318;
   --shadow: 0 1px 2px rgba(23, 25, 23, 0.06), 0 8px 24px rgba(23, 25, 23, 0.06);
 }
 
+:root:not([data-theme]),
 [data-theme='dark'] {
   color-scheme: dark;
   --bg: #101210;
@@ -83,6 +92,22 @@
   --focus: var(--sl-lime);
   --danger: #ff8a80;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+// Bright primary colours keep dark button labels readable in either appearance mode.
+// Each has a deeper companion for links and selected states on light surfaces.
+@each $name, $primary, $text in (
+  ('lime', #c5ff00, #4a6400),
+  ('blue', #70b7ff, #165ca8),
+  ('red', #ff8585, #ad2525),
+  ('yellow', #ffda47, #775d00),
+  ('orange', #ffa45b, #934500),
+  ('violet', #c0a0ff, #6940b3)
+) {
+  [data-colour='#{$name}'] {
+    --accent: #{$primary};
+    --accent-light-text: #{$text};
+  }
 }
 
 // Respect reduced motion (system setting, or the in-app override that sets data-motion).
@@ -194,7 +219,7 @@ svg {
     opacity var(--dur-fast);
 
   &:hover {
-    background: #d4ff3d;
+    background: var(--accent-hover);
   }
   &:active {
     transform: scale(0.98);
@@ -245,4 +270,19 @@ svg {
   border: 2px solid rgba(247, 248, 244, 0.25);
   border-top-color: var(--on-video);
   animation: sl-spin 0.9s linear infinite;
+}
+
+.app-top {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  padding-bottom: var(--ticker-gap);
+  background: var(--bg);
+}
+
+.app-shell[data-ticker='false'] {
+  --top-h: var(--header-h);
+  .app-top {
+    padding-bottom: 0;
+  }
 }

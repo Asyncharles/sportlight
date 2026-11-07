@@ -1,6 +1,15 @@
+import { fileURLToPath } from 'node:url';
 import { createApp } from './app.js';
 import { loadConfig } from './config.js';
 import { createLogger } from './logger.js';
+
+// Load the repository's private local configuration in dev and built Node runs.
+// Explicit process environment values (including Docker secrets) retain precedence.
+try {
+  process.loadEnvFile(fileURLToPath(new URL('../../../.env', import.meta.url)));
+} catch (error) {
+  if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+}
 
 const log = createLogger('backend');
 

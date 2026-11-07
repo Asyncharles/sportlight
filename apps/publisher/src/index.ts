@@ -8,7 +8,7 @@ import {
   type AnyFeedEvent,
   type LoopingMp4Source,
 } from '@sportlight/shared';
-import { DEMO_FEEDS, hash01, inWindows, intensityAt, stringSeed, type DemoFeed } from './scenario.js';
+import { DEMO_FEEDS, inWindows, intensityAt, type DemoFeed } from './scenario.js';
 
 /**
  * Mock feed provider. Publishes the demo scenario to RabbitMQ exactly as a real provider adapter
@@ -51,6 +51,8 @@ interface CatalogClip {
   poster: string;
   durationSec: number;
   hasAudio: boolean;
+  startOffsetSec?: number;
+  event?: { title: string; subtitle: string; broadcaster: DemoFeed['broadcaster'] };
   thumbnails: { template: string; intervalSec: number; count: number };
 }
 
@@ -73,14 +75,14 @@ async function loadCatalog(): Promise<Map<string, CatalogClip>> {
   }
 }
 
-function sourceFor(feed: DemoFeed, clip: CatalogClip, runSeed: number): LoopingMp4Source {
+function sourceFor(clip: CatalogClip): LoopingMp4Source {
   const base = config.mediaPublicBase;
   return {
     kind: 'looping-mp4',
     url: `${base}/${clip.video}`,
     durationSec: clip.durationSec,
-    // Start each run somewhere different in the footage.
-    mediaOffsetSec: Math.round(hash01(runSeed, 1) * clip.durationSec * 10) / 10,
+    // Begin inside the broadcast instead of randomly landing in an interval or credits.
+    mediaOffsetSec: Math.min(clip.startOffsetSec ?? 0, Math.max(0, clip.durationSec - 1)),
     hasAudio: clip.hasAudio,
     posterUrl: `${base}/${clip.poster}`,
     thumbnails: { ...clip.thumbnails, template: `${base}/${clip.thumbnails.template}` },
@@ -96,12 +98,17 @@ let channel: ConfirmChannel | null = null;
 const outbox: Array<{ key: string; body: Buffer; id: string }> = [];
 
 async function connect(): Promise<void> {
-  for (let attempt = 0; ; attempt++) {
+  for (let attempt = 0; !stopping; attempt++) {
+    let candidate: ChannelModel | null = null;
     try {
       const c = await amqp.connect(config.amqpUrl, {
         clientProperties: { connection_name: 'sportlight-mock-publisher' },
       });
+      candidate = c;
+      c.on('error', (err) => log('amqp error', { err: err.message }));
       const ch = await c.createConfirmChannel();
+      ch.on('error', (err) => log('amqp channel error', { err: err.message }));
+      ch.on('close', () => { void c.close().catch(() => {}); });
       await ch.assertExchange(AMQP_TOPOLOGY.exchange, AMQP_TOPOLOGY.exchangeType, { durable: true });
       c.on('error', (err) => log('amqp error', { err: err.message }));
       c.on('close', () => {
@@ -116,10 +123,11 @@ async function connect(): Promise<void> {
       log('connected to RabbitMQ');
       while (outbox.length) {
         const m = outbox.shift()!;
-        ch.publish(AMQP_TOPOLOGY.exchange, m.key, m.body, { messageId: m.id, contentType: 'application/json' });
+        rawPublish(m.key, m.body, m.id, true);
       }
       return;
     } catch (err) {
+      await candidate?.close().catch(() => {});
       const delay = Math.min(15_000, 500 * 2 ** attempt);
       const e = err as Error & { code?: string; errors?: Array<{ code?: string }> };
       const reason = e.message || e.code || e.errors?.map((x) => x.code).join(', ') || String(err);
@@ -134,11 +142,17 @@ function rawPublish(key: string, body: Buffer, id: string, lifecycle: boolean) {
     if (lifecycle && outbox.length < 1000) outbox.push({ key, body, id });
     return;
   }
+  const publishingConnection = conn;
   channel.publish(AMQP_TOPOLOGY.exchange, key, body, {
     messageId: id,
     contentType: 'application/json',
     persistent: lifecycle,
     timestamp: Math.floor(Date.now() / 1000),
+  }, (err: Error | null) => {
+    if (err && lifecycle && outbox.length < 1000) {
+      outbox.push({ key, body, id });
+      if (!stopping) void publishingConnection?.close().catch(() => {});
+    }
   });
 }
 
@@ -203,6 +217,8 @@ function announce(feed: DemoFeed, run: Run, now: number) {
         subtitle: feed.subtitle,
         ...(feed.competitionId ? { competitionId: feed.competitionId } : {}),
         ...(feed.teamIds ? { teamIds: feed.teamIds } : {}),
+        ...(feed.venue ? { venue: feed.venue } : {}),
+        broadcaster: feed.broadcaster,
       },
       source: run.source,
     }),
@@ -221,12 +237,11 @@ function step(catalog: Map<string, CatalogClip>, processStart: number) {
     let run = runs.get(feed.id);
 
     if (shouldBeLive && !run) {
-      const runSeed = config.seed ^ stringSeed(feed.id) ^ Math.floor(t);
       run = {
         runId: `${feed.id}.${now.toString(36)}`,
         startedAtMs: now,
         seq: 0,
-        source: sourceFor(feed, clip, runSeed),
+        source: sourceFor(clip),
         unavailable: false,
         lastAnnounceMs: 0,
       };
@@ -273,6 +288,16 @@ function onReconnected() {
 async function main() {
   log('starting', { seed: config.seed, speed: config.speed, offsetSec: config.offsetSec, chaos: config.chaos });
   const catalog = await loadCatalog();
+  for (const feed of DEMO_FEEDS) {
+    const event = catalog.get(feed.clipId)?.event;
+    if (event) {
+      Object.assign(feed, event);
+      // Old scenario IDs are stable; old teams/venues must not describe the new replay.
+      delete feed.teamIds;
+      delete feed.venue;
+      delete feed.competitionId;
+    }
+  }
   const missing = DEMO_FEEDS.filter((f) => !catalog.has(f.clipId)).map((f) => f.id);
   if (missing.length) log('feeds without media are skipped', { missing });
   await connect();

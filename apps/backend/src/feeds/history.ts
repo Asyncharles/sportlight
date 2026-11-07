@@ -1,4 +1,4 @@
-import { createWriteStream, type WriteStream } from 'node:fs';
+import { appendFileSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { dayKey, type FeedId, type IntensityReading, type RunId } from '@sportlight/shared';
@@ -22,7 +22,7 @@ export class IntensityHistory {
     string,
     { feedId: FeedId; runId: RunId; samples: HistorySample[]; touchedAt: number }
   >();
-  private stream: { day: string; out: WriteStream } | null = null;
+
   private readonly dir: string;
 
   constructor(
@@ -82,23 +82,15 @@ export class IntensityHistory {
     for (const [key, run] of this.runs) if (now - run.touchedAt > maxIdleMs) this.runs.delete(key);
   }
 
-  async close() {
-    const out = this.stream?.out;
-    this.stream = null;
-    if (out) await new Promise<void>((resolve) => out.end(resolve));
-  }
+  async close() {}
 
   private append(feedId: FeedId, runId: RunId, sample: HistorySample) {
     if (!this.persist) return;
     const day = dayKey(Date.parse(sample.at), this.timezone);
-    if (this.stream?.day !== day) {
-      this.stream?.out.end();
-      const out = createWriteStream(join(this.dir, `${day}.ndjson`), { flags: 'a' });
-      out.on('error', (err) => this.log.error('history write failed', { err }));
-      this.stream = { day, out };
-    }
-    this.stream.out.write(JSON.stringify({ feedId, runId, ...sample }) + '\n');
+    // Small PoC journal: complete the durable append before acknowledging the event.
+    appendFileSync(join(this.dir, `${day}.ndjson`), JSON.stringify({ feedId, runId, ...sample }) + '\n', { flush: true });
   }
+
 }
 
 function lowerBound(s: HistorySample[], streamTime: number): number {

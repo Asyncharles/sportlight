@@ -1,68 +1,317 @@
 {
-  "$comment": "Openly licensed demo footage from Wikimedia Commons. build.mjs resolves each file through the Commons API, records author/licence for attribution, and transcodes segments into one looping 720p MP4 per clip. Edit this list to change the demo media; the clip id is what feeds reference.",
-  "output": { "width": 1280, "height": 720, "fps": 30, "thumbnailIntervalSec": 2 },
+  "comment": "Full broadcast replays. Legacy clip IDs preserve scenario compatibility. No trimming, retiming or short-clip fallback.",
+  "output": {
+    "maxHeight": 720,
+    "thumbnailIntervalSec": 10
+  },
   "clips": [
     {
       "id": "football-fra-ger",
-      "segments": [
-        { "commons": "File:Match de football France-Allemagne - 16 octobre 2018 - Penalty d'Antoine Griezmann.ogv" },
-        { "commons": "File:Match de football France-Allemagne - 16 octobre 2018 - Penalty de Toni Kroos.ogv" }
-      ]
+      "youtube": "https://www.youtube.com/watch?v=ORzHdV_NVnQ",
+      "minDurationSec": 2700,
+      "startOffsetSec": 600,
+      "event": {
+        "title": "Argentina v France",
+        "subtitle": "2022 FIFA World Cup \u00b7 Final",
+        "broadcaster": {
+          "name": "FIFA",
+          "channel": "YouTube replay"
+        }
+      }
     },
     {
       "id": "basketball-hawaii",
-      "segments": [{ "commons": "File:Hawaii Basketball - Highlights From Northern Arizona Game.webm", "start": 20, "duration": 100 }]
+      "youtube": "https://www.youtube.com/watch?v=gdtetu4nnZc",
+      "minDurationSec": 2700,
+      "startOffsetSec": 600,
+      "event": {
+        "title": "USA v Serbia",
+        "subtitle": "2014 FIBA World Cup \u00b7 Final",
+        "broadcaster": {
+          "name": "FIBA Basketball",
+          "channel": "YouTube replay"
+        }
+      }
     },
     {
       "id": "tennis-davis-cup",
-      "segments": [
-        { "commons": "File:2018 Davis Cup Americas Zone - Uruguay vs Mexico - 03.webm" },
-        { "commons": "File:2018 Davis Cup Americas Zone - Uruguay vs Mexico - 04.webm" },
-        { "commons": "File:2018 Davis Cup Americas Zone - Uruguay vs Mexico - 05.webm" },
-        { "commons": "File:2018 Davis Cup Americas Zone - Uruguay vs Mexico - 06.webm" },
-        { "commons": "File:2018 Davis Cup Americas Zone - Uruguay vs Mexico - 07.webm" }
-      ]
+      "youtube": "https://www.youtube.com/watch?v=wZnCcqm_g-E",
+      "minDurationSec": 2700,
+      "startOffsetSec": 600,
+      "event": {
+        "title": "Federer v Nadal",
+        "subtitle": "Wimbledon 2019 \u00b7 Semi-final",
+        "broadcaster": {
+          "name": "Wimbledon",
+          "channel": "YouTube replay"
+        }
+      }
     },
     {
       "id": "motorsport-turkish-gp",
-      "segments": [{ "commons": "File:Formula 1 Turkish GP 2021.ogg" }]
+      "youtube": "https://www.youtube.com/watch?v=s-_frB4j0Sc",
+      "minDurationSec": 2700,
+      "startOffsetSec": 600,
+      "event": {
+        "title": "Monaco E-Prix",
+        "subtitle": "Formula E 2021 \u00b7 Round 7",
+        "broadcaster": {
+          "name": "Formula E",
+          "channel": "YouTube replay"
+        }
+      }
     },
     {
       "id": "motorsport-formula07",
-      "segments": [{ "commons": "File:Formula 07 2023, Fecha 5, carrera Clase B.webm", "duration": 90 }]
+      "youtube": "https://www.youtube.com/watch?v=GtDCe7VwiCE",
+      "minDurationSec": 2700,
+      "startOffsetSec": 600,
+      "event": {
+        "title": "GT World Challenge \u00b7 Brands Hatch",
+        "subtitle": "2024 GT World Challenge Europe \u00b7 Race 1",
+        "broadcaster": {
+          "name": "GTWorld",
+          "channel": "YouTube replay"
+        }
+      }
     },
     {
       "id": "icehockey-rpi",
-      "segments": [
-        { "commons": "File:RPI Engineers women's ice hockey play against Syracuse at the Tennity Ice Skating Pavilion, Syracuse University.webm" }
-      ]
+      "youtube": "https://www.youtube.com/watch?v=1dVT3Br0CnE",
+      "minDurationSec": 2700,
+      "startOffsetSec": 600,
+      "event": {
+        "title": "Canada v Finland",
+        "subtitle": "2019 IIHF World Championship \u00b7 Final",
+        "broadcaster": {
+          "name": "IIHF",
+          "channel": "YouTube replay"
+        }
+      }
     },
     {
       "id": "cycling-zottegem",
-      "segments": [
-        { "commons": "File:Zottegem - Grote Prijs Stad Zottegem, 18 augustus 2015 (C30A).ogv" },
-        { "commons": "File:Zottegem - Grote Prijs Stad Zottegem, 19 augustus 2014 (A79A).ogv" }
-      ]
+      "youtube": "https://www.youtube.com/watch?v=46xsERCGJ8o",
+      "minDurationSec": 2700,
+      "startOffsetSec": 600,
+      "event": {
+        "title": "Men\u2019s Elite XCO Final",
+        "subtitle": "2024 UCI Mountain Bike World Championships",
+        "broadcaster": {
+          "name": "UCI",
+          "channel": "YouTube replay"
+        }
+      }
     },
     {
       "id": "rugby-mixed",
-      "segments": [
-        { "commons": "File:Toads attack (rugby).webm" },
-        { "commons": "File:Italy Georgia rugby 2024 kick-off.ogg" },
-        { "commons": "File:2023 South American Men's Rugby Sevens - Video 2.webm" }
-      ]
+      "youtube": "https://www.youtube.com/watch?v=CvG69FVRsUs",
+      "minDurationSec": 2700,
+      "startOffsetSec": 600,
+      "event": {
+        "title": "England v South Africa",
+        "subtitle": "2019 Rugby World Cup \u00b7 Final",
+        "broadcaster": {
+          "name": "World Rugby",
+          "channel": "YouTube replay"
+        }
+      }
     },
     {
       "id": "chess-blitz",
-      "segments": [{ "commons": "File:Joaquin Perkins blitz chess vs USCF expert.webm" }]
+      "youtube": "https://www.youtube.com/watch?v=PFNSo2Ad8ew",
+      "minDurationSec": 2700,
+      "startOffsetSec": 600,
+      "event": {
+        "title": "Saint Louis Rapid & Blitz",
+        "subtitle": "2026 Grand Chess Tour \u00b7 Day 1",
+        "broadcaster": {
+          "name": "Saint Louis Chess Club",
+          "channel": "YouTube replay"
+        }
+      }
     },
     {
       "id": "esports-yokota",
-      "segments": [{ "commons": "File:Yokota Esports Tournament of Champions (NO GRAPHICS) (994894).webm" }]
+      "youtube": "https://www.youtube.com/watch?v=0C72Xqpbz7M",
+      "minDurationSec": 2400,
+      "startOffsetSec": 180,
+      "event": {
+        "title": "Gen.G v T1",
+        "subtitle": "MSI 2025 \u00b7 Grand Final \u00b7 Game 5",
+        "broadcaster": {
+          "name": "EpicSkillshot",
+          "channel": "YouTube replay"
+        }
+      }
     },
     {
       "id": "athletics-relay",
-      "segments": [{ "commons": "File:4x100 m female Athletissima 2012.ogv" }]
+      "youtube": "https://www.youtube.com/watch?v=DCalbRn9NZQ",
+      "minDurationSec": 2700,
+      "startOffsetSec": 600,
+      "event": {
+        "title": "World Athletics \u00b7 Day 1",
+        "subtitle": "2026 Ultimate Championship \u00b7 Budapest",
+        "broadcaster": {
+          "name": "World Athletics",
+          "channel": "YouTube replay"
+        }
+      }
+    },
+    {
+      "id": "football-france-croatia-2018",
+      "youtube": "https://www.youtube.com/watch?v=SvV6aUki6LU",
+      "minDurationSec": 3600,
+      "startOffsetSec": 600,
+      "event": {
+        "title": "France v Croatia",
+        "subtitle": "2018 FIFA World Cup \u00b7 Final",
+        "broadcaster": {
+          "name": "FIFA",
+          "channel": "YouTube replay"
+        }
+      }
+    },
+    {
+      "id": "basketball-argentina-spain-2019",
+      "youtube": "https://www.youtube.com/watch?v=fDHZzi5evW8",
+      "minDurationSec": 3600,
+      "startOffsetSec": 600,
+      "event": {
+        "title": "Argentina v Spain",
+        "subtitle": "2019 FIBA World Cup \u00b7 Final",
+        "broadcaster": {
+          "name": "FIBA Basketball",
+          "channel": "YouTube replay"
+        }
+      }
+    },
+    {
+      "id": "rugby-newzealand-australia-2015",
+      "youtube": "https://www.youtube.com/watch?v=P0aj6bBq4HE",
+      "minDurationSec": 3600,
+      "startOffsetSec": 600,
+      "event": {
+        "title": "New Zealand v Australia",
+        "subtitle": "2015 Rugby World Cup \u00b7 Final",
+        "broadcaster": {
+          "name": "World Rugby",
+          "channel": "YouTube replay"
+        }
+      }
+    },
+    {
+      "id": "tennis-murray-djokovic-2013",
+      "youtube": "https://www.youtube.com/watch?v=Wh-WuZ1mCo4",
+      "minDurationSec": 3600,
+      "startOffsetSec": 600,
+      "event": {
+        "title": "Murray v Djokovic",
+        "subtitle": "Wimbledon 2013 \u00b7 Final",
+        "broadcaster": {
+          "name": "Wimbledon",
+          "channel": "YouTube replay"
+        }
+      }
+    },
+    {
+      "id": "motorsport-london-2023",
+      "youtube": "https://www.youtube.com/watch?v=jfwoXiJ5mS0",
+      "minDurationSec": 3600,
+      "startOffsetSec": 600,
+      "event": {
+        "title": "London E-Prix",
+        "subtitle": "Formula E 2023 \u00b7 Round 15",
+        "broadcaster": {
+          "name": "Channel 4 Sport",
+          "channel": "YouTube replay"
+        }
+      }
+    },
+    {
+      "id": "cycling-nove-mesto-u23",
+      "youtube": "https://www.youtube.com/watch?v=istCVyY0hLg",
+      "minDurationSec": 3600,
+      "startOffsetSec": 600,
+      "event": {
+        "title": "Men\u2019s U23 XCO \u00b7 Nov\u00e9 M\u011bsto",
+        "subtitle": "UCI Mountain Bike World Series \u00b7 Full race",
+        "broadcaster": {
+          "name": "WHOOP UCI Mountain Bike World Series",
+          "channel": "YouTube replay"
+        }
+      }
+    },
+    {
+      "id": "esports-t1-blg-2024",
+      "youtube": "https://www.youtube.com/watch?v=iwEAK5wsWLg",
+      "minDurationSec": 2400,
+      "startOffsetSec": 180,
+      "event": {
+        "title": "T1 v Bilibili Gaming",
+        "subtitle": "Worlds 2024 \u00b7 Grand Final \u00b7 Game 5",
+        "broadcaster": {
+          "name": "EpicSkillshot - LoL VOD Library",
+          "channel": "YouTube replay"
+        }
+      }
+    },
+    {
+      "id": "chess-clutch-2025",
+      "youtube": "https://www.youtube.com/watch?v=GYydM0eGKcQ",
+      "minDurationSec": 3600,
+      "startOffsetSec": 600,
+      "event": {
+        "title": "Clutch Chess \u00b7 Champions Showdown",
+        "subtitle": "2025 \u00b7 Final day",
+        "broadcaster": {
+          "name": "Saint Louis Chess Club",
+          "channel": "YouTube replay"
+        }
+      }
+    },
+    {
+      "id": "athletics-budapest-day2",
+      "youtube": "https://www.youtube.com/watch?v=Oj1I4IkBwhg",
+      "minDurationSec": 3600,
+      "startOffsetSec": 600,
+      "event": {
+        "title": "World Athletics \u00b7 Day 2",
+        "subtitle": "2026 Ultimate Championship \u00b7 Budapest",
+        "broadcaster": {
+          "name": "World Athletics",
+          "channel": "YouTube replay"
+        }
+      }
+    },
+    {
+      "id": "basketball-germany-serbia-2023",
+      "youtube": "https://www.youtube.com/watch?v=NMgQj7fNrSQ",
+      "minDurationSec": 3600,
+      "startOffsetSec": 600,
+      "event": {
+        "title": "Germany v Serbia",
+        "subtitle": "2023 FIBA World Cup \u00b7 Final",
+        "broadcaster": {
+          "name": "FIBA Basketball",
+          "channel": "YouTube replay"
+        }
+      }
+    },
+    {
+      "id": "rugby-england-australia-2003",
+      "youtube": "https://www.youtube.com/watch?v=TscBZmQJudY",
+      "minDurationSec": 3600,
+      "startOffsetSec": 600,
+      "event": {
+        "title": "England v Australia",
+        "subtitle": "2003 Rugby World Cup \u00b7 Final",
+        "broadcaster": {
+          "name": "World Rugby",
+          "channel": "YouTube replay"
+        }
+      }
     }
   ]
 }

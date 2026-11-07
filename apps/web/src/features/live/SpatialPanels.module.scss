@@ -1,0 +1,95 @@
+// Live ticker strip beneath the shared header: a quiet, theme-aware rail.
+
+.up {
+  color: color-mix(in srgb, var(--accent-text) 80%, transparent);
+}
+.down {
+  color: color-mix(in srgb, var(--danger) 70%, var(--text-muted));
+}
+.flat {
+  color: var(--text-faint);
+}
+
+// Flat rail: no fill, just hairlines, so it reads as metadata rather than a control.
+.ticker {
+  height: var(--ticker-h, 30px);
+  margin: 0 var(--gutter);
+  overflow: hidden;
+  font-family: var(--font);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  border-block: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 48px, #000 calc(100% - 48px), transparent);
+  button {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 0;
+    cursor: pointer;
+  }
+}
+.tickerRun {
+  display: flex;
+  width: max-content;
+  height: 100%;
+  will-change: transform;
+}
+.tickerStrip {
+  display: flex;
+  height: 100%;
+}
+.tick,
+.tickHot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px;
+  white-space: nowrap;
+  transition: color var(--dur-fast) var(--ease);
+  // Thin divider between items instead of wide padding.
+  &::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 50%;
+    width: 1px;
+    height: 10px;
+    translate: 0 -50%;
+    background: var(--border);
+  }
+  &:hover,
+  &:focus-visible {
+    color: var(--text);
+    b { color: var(--text); }
+  }
+  svg {
+    flex: none;
+    color: var(--text-faint);
+  }
+  b {
+    font-weight: 500;
+    color: color-mix(in srgb, var(--text) 82%, transparent);
+    transition: color var(--dur-fast) var(--ease);
+  }
+  // Fixed-width numbers so items never change size as scores tick.
+  > span {
+    font-family: var(--mono);
+    font-size: 11px;
+    min-width: 3ch;
+    text-align: right;
+  }
+  .score {
+    margin-left: 2px;
+    min-width: 2ch;
+    color: var(--text-muted);
+  }
+}
+.tickHot .score {
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.ticker[data-reduced-motion='true'] { overflow-x: auto; }
+.empty { align-self: center; padding: 0 24px; color: var(--text-faint); }

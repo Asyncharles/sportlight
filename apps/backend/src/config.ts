@@ -30,6 +30,18 @@ export interface BackendConfig {
   historyLimit: number;
   selection: SelectionConfig;
   highlights: HighlightConfig;
+  content: {
+    appUrl: string; clientId: string; clientSecret: string; encryptionKey: string;
+    allowedEmails: string[]; mediaBase: string; ffmpegPath: string; settleSeconds: number;
+  };
+  captions: {
+    /** Gemini API key. Without one, highlights keep their deterministic template captions. */
+    geminiApiKey: string | null;
+    geminiModel: string;
+    /** Where the backend fetches origin-relative media (video clips for the model). */
+    mediaFetchBase: string | null;
+    mediaPublicPrefix: string;
+  };
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig {
@@ -86,6 +98,20 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig 
       timezone,
       maxPerDay: num('HIGHLIGHT_MAX_PER_DAY', DEFAULT_HIGHLIGHT_CONFIG.maxPerDay),
     },
+    content: {
+      appUrl: str('CONTENT_APP_URL', 'http://localhost:5173').replace(/\/$/, ''),
+      clientId: env.GOOGLE_CLIENT_ID || '', clientSecret: env.GOOGLE_CLIENT_SECRET || '',
+      encryptionKey: env.CONTENT_ENCRYPTION_KEY || '',
+      allowedEmails: (env.CONTENT_ALLOWED_EMAILS || '').split(',').map(v => v.trim().toLowerCase()).filter(Boolean),
+      mediaBase: str('MEDIA_FETCH_BASE', 'http://localhost:5173/media'),
+      ffmpegPath: str('FFMPEG_PATH', 'ffmpeg'), settleSeconds: num('CONTENT_SETTLE_SECONDS', 30),
+    },
+    captions: {
+      geminiApiKey: env.GEMINI_API_KEY?.trim() || null,
+      geminiModel: str('GEMINI_MODEL', 'gemini-3.6-flash'),
+      mediaFetchBase: str('MEDIA_FETCH_BASE', 'http://localhost:5173/media'),
+      mediaPublicPrefix: str('MEDIA_PUBLIC_PREFIX', '/media'),
+    },
   };
 
   if (config.highlights.exitThreshold > config.highlights.enterThreshold) {
@@ -94,5 +120,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig 
   if (config.highlights.minClipSec > config.highlights.maxClipSec) {
     throw new Error('HIGHLIGHT_MIN_CLIP_SEC must not exceed HIGHLIGHT_MAX_CLIP_SEC');
   }
+  const appUrl = new URL(config.content.appUrl);
+  if (appUrl.pathname !== '/' || appUrl.search || appUrl.hash || appUrl.username || appUrl.password ||
+      (appUrl.protocol !== 'https:' && !(appUrl.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(appUrl.hostname)))) {
+    throw new Error('CONTENT_APP_URL must be an HTTPS origin (HTTP localhost is allowed for development)');
+  }
+  if (config.content.encryptionKey && !/^[a-f0-9]{64}$/i.test(config.content.encryptionKey)) {
+    throw new Error('CONTENT_ENCRYPTION_KEY must be 32 random bytes encoded as 64 hexadecimal characters');
+  }
+  if (config.content.settleSeconds < 5 || config.content.settleSeconds > 3600) throw new Error('CONTENT_SETTLE_SECONDS must be between 5 and 3600');
   return config;
 }

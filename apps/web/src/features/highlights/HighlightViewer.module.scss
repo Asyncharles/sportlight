@@ -80,8 +80,34 @@
 }
 
 .subtitle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
   color: var(--text-muted);
-  margin-top: 2px;
+  margin-top: 6px;
+  font-size: 14px;
+}
+
+.description {
+  margin-top: 6px;
+  max-width: 68ch;
+  font-size: 15.5px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.aiTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--accent-text);
+  font-size: 11.5px;
+  font-weight: 650;
 }
 
 .stats {
@@ -109,9 +135,9 @@
 .rail {
   min-width: 0;
   position: sticky;
-  top: calc(var(--header-h) + 8px);
+  top: calc(var(--top-h) + 8px);
   align-self: start;
-  max-height: calc(100dvh - var(--header-h) - 24px);
+  max-height: calc(100dvh - var(--top-h) - 24px);
   display: flex;
   flex-direction: column;
 }
@@ -199,8 +225,16 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
   color: var(--text-muted);
   font-size: 12px;
+}
+
+.itemEvent {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .itemPeak {

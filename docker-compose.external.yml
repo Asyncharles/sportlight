@@ -1,0 +1,15 @@
+# Use with docker-compose.yml and select media backend publisher web explicitly.
+services:
+  backend:
+    environment:
+      AMQP_URL: ${AMQP_URL:?Set AMQP_URL for the external broker}
+      AMQP_QUEUE: ${AMQP_QUEUE:-sportlight.backend}
+    depends_on: !override
+      media:
+        condition: service_healthy
+  publisher:
+    environment:
+      AMQP_URL: ${AMQP_URL:?Set AMQP_URL for the external broker}
+    depends_on: !override
+      media:
+        condition: service_healthy

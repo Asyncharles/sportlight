@@ -3,23 +3,11 @@
   display: inline-block;
   flex: none;
   overflow: hidden;
+  color: var(--text);
 
-  img {
-    position: absolute;
-    max-width: none;
+  svg {
+    width: 100%;
+    height: 100%;
     user-select: none;
-  }
-}
-
-.dark {
-  display: none;
-}
-
-:global([data-theme='dark']) {
-  .light {
-    display: none;
-  }
-  .dark {
-    display: block;
   }
 }

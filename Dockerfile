@@ -37,6 +37,7 @@ RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --no-audit --no-fund 
 # ---------------------------------------------------------------- backend
 FROM node:${NODE_VERSION}-alpine AS backend
 ENV NODE_ENV=production PORT=4000 DATA_DIR=/data
+RUN apk add --no-cache ffmpeg
 WORKDIR /app
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/packages/shared/package.json ./packages/shared/package.json

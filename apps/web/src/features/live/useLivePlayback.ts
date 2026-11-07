@@ -22,7 +22,6 @@ interface Options {
 
 const SYNC_MS = 1000;
 const HARD_SEEK_SEC = 2.5;
-const SOFT_SYNC_SEC = 0.35;
 const BUFFERING_DELAY_MS = 350;
 const MAX_RETRIES = 4;
 /** Show "Go live" once playback is this far behind. */
@@ -33,7 +32,7 @@ export const BEHIND_THRESHOLD_SEC = 2;
  *
  * The live position is derived from the run start and the server clock, so every viewer sees the
  * same moment. The player follows `live − lag`: pausing grows `lag`, "Go live" resets it. Small
- * drift is corrected by nudging playbackRate (no visible jump); large drift (stalls, background
+ * drift is tolerated to preserve normal speed; large drift (stalls, background
  * tabs) by seeking. The <video> element is never recreated for a feed, which is what lets the
  * stage move a tile between windows without restarting playback.
  */
@@ -182,8 +181,6 @@ export function useLivePlayback(videoRef: RefObject<HTMLVideoElement>, feed: Fee
       if (Math.abs(drift) > HARD_SEEK_SEC) {
         v.playbackRate = 1;
         v.currentTime = target;
-      } else if (Math.abs(drift) > SOFT_SYNC_SEC) {
-        v.playbackRate = drift > 0 ? 1.08 : 0.93;
       } else if (v.playbackRate !== 1) {
         v.playbackRate = 1;
       }

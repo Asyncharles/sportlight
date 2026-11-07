@@ -2,7 +2,6 @@ node_modules/
 dist/
 *.tsbuildinfo
 .DS_Store
-.env
 .env.*
 !.env.example
 coverage/
@@ -12,3 +11,5 @@ media/dist/
 # Backend runtime data (intensity history, highlights)
 data/
 apps/backend/data/
+
+media/.tools/

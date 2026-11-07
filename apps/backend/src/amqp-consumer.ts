@@ -75,14 +75,20 @@ export class FeedEventConsumer {
   private async connect(attempt: number) {
     if (this.stopped) return;
     const { log } = this.opts;
+    let candidate: ChannelModel | null = null;
     try {
       const conn = await amqp.connect(this.opts.url, { clientProperties: { connection_name: 'sportlight-backend' } });
+      candidate = conn;
+      if (this.stopped) { await conn.close(); return; }
       conn.on('error', (err) => log.warn('amqp connection error', { err }));
-      conn.on('close', () => this.onClose());
+      conn.on('close', () => { if (this.conn === conn) this.onClose(); });
       const ch = await conn.createChannel();
+      ch.on('error', (err) => log.warn('amqp channel error', { err }));
+      ch.on('close', () => { if (this.conn === conn) { this.onClose(); void conn.close().catch(() => {}); } });
       await this.declareTopology(ch);
       await ch.prefetch(this.opts.prefetch);
       await ch.consume(this.opts.queue, (msg) => this.handle(ch, msg), { noAck: false });
+      if (this.stopped) { await conn.close(); return; }
       this.conn = conn;
       this.channel = ch;
       this.stats.connected = true;
@@ -90,6 +96,8 @@ export class FeedEventConsumer {
       this.stats.lastError = null;
       log.info('consuming feed events', { queue: this.opts.queue });
     } catch (err) {
+      await candidate?.close().catch(() => {});
+      if (this.stopped) return;
       this.stats.lastError = describeError(err);
       const delay = Math.min(30_000, 500 * 2 ** attempt);
       log.warn('amqp connect failed, retrying', { err: this.stats.lastError, inMs: delay });
@@ -115,7 +123,14 @@ export class FeedEventConsumer {
   }
 
   private handle(ch: Channel, msg: ConsumeMessage | null) {
-    if (!msg) return; // consumer cancelled by broker; the close handler reconnects
+    if (!msg) {
+      if (this.channel === ch) {
+        const conn = this.conn;
+        this.onClose();
+        void conn?.close().catch(() => {});
+      }
+      return;
+    }
     const receivedAt = Date.now();
     this.stats.received++;
     this.windowCount++;

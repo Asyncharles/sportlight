@@ -1,0 +1,210 @@
+// 3D-only overlays. Surfaces render at native screen size (1280×720 CSS px), so type is large.
+
+$lime: var(--accent);
+$hot: #ff7a2e;
+$ink: #eef4ea;
+$muted: #8a9a8e;
+$up: #7ee35a;
+$down: #ff5d4d;
+
+// ── Switch takeover ──────────────────────────────────────────────────────────────────────────
+.takeover {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  color: $ink;
+  background: linear-gradient(90deg, #050806f0 0%, #050806d9 45%, #05080699 100%);
+  animation: fadeIn 400ms ease-out;
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+}
+// A thick lime edge that drains around the screen over the countdown.
+.edge {
+  position: absolute;
+  inset: 0;
+  padding: 10px;
+  background: conic-gradient(from 0deg, $lime var(--sweep), color-mix(in srgb, var(--accent) 13%, transparent) 0);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: drain linear forwards;
+  filter: drop-shadow(0 0 20px color-mix(in srgb, var(--accent) 53%, transparent));
+}
+@property --sweep {
+  syntax: '<percentage>';
+  inherits: false;
+  initial-value: 100%;
+}
+@keyframes drain {
+  from {
+    --sweep: 100%;
+  }
+  to {
+    --sweep: 0%;
+  }
+}
+.progress {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  height: 10px;
+  background: #ffffff12;
+  i {
+    position: absolute;
+    inset: 0;
+    background: $lime;
+    transform-origin: left;
+    animation: shrink linear forwards;
+  }
+}
+@keyframes shrink {
+  to {
+    transform: scaleX(0);
+  }
+}
+.body {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: 56px;
+  padding: 60px 80px;
+}
+.count {
+  flex: none;
+  width: 260px;
+  height: 260px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 6px solid $lime;
+  box-shadow:
+    0 0 80px color-mix(in srgb, var(--accent) 33%, transparent),
+    inset 0 0 60px color-mix(in srgb, var(--accent) 13%, transparent);
+  font: 700 170px/1 var(--mono);
+  color: $lime;
+  span {
+    animation: pop 350ms cubic-bezier(0.2, 0.9, 0.2, 1.3);
+  }
+}
+@keyframes pop {
+  from {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+.next {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.kicker {
+  font: 600 22px var(--mono);
+  letter-spacing: 6px;
+  text-transform: uppercase;
+  color: $lime;
+}
+.card {
+  display: flex;
+  gap: 28px;
+  align-items: center;
+  img,
+  .noPoster {
+    flex: none;
+    width: 340px;
+    height: 191px;
+    object-fit: cover;
+    border-radius: 12px;
+    background: #111;
+    box-shadow:
+      0 0 0 3px $lime,
+      0 20px 60px #000a;
+  }
+  > div {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  b {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-size: 46px;
+    line-height: 1.1;
+    span {
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+    svg {
+      flex: none;
+    }
+  }
+}
+.compare {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  font: 600 34px var(--mono);
+  color: $muted;
+  svg {
+    align-self: center;
+  }
+  em {
+    font-style: normal;
+    color: $lime;
+    font-size: 48px;
+  }
+  small {
+    font-size: 18px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+}
+.actions {
+  display: flex;
+  gap: 18px;
+  button {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    height: 84px;
+    padding: 0 40px;
+    border-radius: 999px;
+    border: 3px solid #ffffff40;
+    background: #ffffff14;
+    color: $ink;
+    font: 700 30px var(--font);
+    cursor: pointer;
+    &:hover {
+      background: #ffffff26;
+      border-color: #ffffffaa;
+    }
+  }
+  .now {
+    border-color: $lime;
+    background: $lime;
+    color: #121807;
+    &:hover {
+      background: var(--accent-hover);
+      border-color: var(--accent-hover);
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .takeover,
+  .count span {
+    animation: none;
+  }
+}

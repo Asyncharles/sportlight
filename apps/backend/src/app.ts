@@ -1,3 +1,5 @@
+import { readdir, stat, unlink } from 'node:fs/promises';
+import { join } from 'node:path';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import {
   isKnownSport,
@@ -9,11 +11,13 @@ import {
   type FeedState,
   type Highlight,
 } from '@sportlight/shared';
+import { ContentService } from './content/service.js';
 import { FeedEventConsumer } from './amqp-consumer.js';
 import type { BackendConfig } from './config.js';
 import { FeedStore } from './feeds/feed-store.js';
 import { IntensityHistory } from './feeds/history.js';
 import { MomentDetector, type Moment } from './highlights/detector.js';
+import { GeminiCaptioner, HighlightCaptioner } from './highlights/captioner.js';
 import { HighlightStore } from './highlights/store.js';
 import type { Logger } from './logger.js';
 import { ViewerRegistry } from './viewers.js';
@@ -31,10 +35,38 @@ export async function createApp(config: BackendConfig, log: Logger) {
     log.child('history'),
   );
   const detector = new MomentDetector(config.highlights);
-  const highlights = new HighlightStore(config.dataDir, config.highlights, log.child('highlights'));
+  const captioner = new HighlightCaptioner({
+    model: config.captions.geminiApiKey
+      ? new GeminiCaptioner(config.captions.geminiApiKey, config.captions.geminiModel)
+      : null,
+    mediaFetchBase: config.captions.mediaFetchBase,
+    mediaPublicPrefix: config.captions.mediaPublicPrefix,
+    ffmpegPath: config.content.ffmpegPath,
+    log: log.child('captions'),
+    onCaption: (id, caption) => {
+      const updated = highlights.setCaption(id, caption);
+      if (updated) hub.broadcast({ type: 'highlight', highlight: updated });
+    },
+  });
+  const highlights = new HighlightStore(
+    config.dataDir,
+    config.highlights,
+    log.child('highlights'),
+    true,
+    (h, previous) => captioner.instant(h, previous),
+  );
   const viewers = new ViewerRegistry();
   await history.init();
   await highlights.init();
+  // Name anything loaded from disk that has no caption yet (e.g. cut before captions existed).
+  captioner.restore(highlights.all());
+  for (const h of highlights.all()) {
+    if (!h.caption || h.caption.model === 'template') highlights.setCaption(h.id, captioner.instant(h));
+    captioner.enqueue(highlights.get(h.id)!);
+  }
+  const content = new ContentService(config, () => highlights.all(), log.child('content'));
+  await content.init();
+  log.info('highlight captions', { model: captioner.stats.model });
 
   const clientConfig: ClientConfig = {
     selection: config.selection,
@@ -44,7 +76,7 @@ export async function createApp(config: BackendConfig, log: Logger) {
 
   const server = createServer((req, res) => {
     route(req, res).catch((err) => {
-      log.error('request failed', { err, url: req.url });
+      log.error('request failed', { err, path: new URL(req.url ?? '/', 'http://local').pathname });
       if (!res.headersSent) sendJson(res, 500, { error: 'internal_error' });
     });
   });
@@ -67,9 +99,13 @@ export async function createApp(config: BackendConfig, log: Logger) {
     const changes = highlights.addMoment(moment, feed, (from, to) =>
       history.range(moment.feedId, moment.runId, from, to),
     );
-    for (const id of changes.removed) hub.broadcast({ type: 'highlight.removed', id });
+    for (const id of changes.removed) {
+      captioner.forget(id);
+      hub.broadcast({ type: 'highlight.removed', id });
+    }
     for (const h of changes.upserted) {
       hub.broadcast({ type: 'highlight', highlight: h });
+      captioner.enqueue(h);
       log.info('highlight', { feed: h.feedId, peak: h.peak.score, duration: h.clip.durationSec });
     }
   }
@@ -144,7 +180,30 @@ export async function createApp(config: BackendConfig, log: Logger) {
 
   async function route(req: IncomingMessage, res: ServerResponse) {
     const url = new URL(req.url ?? '/', 'http://local');
+    if (await content.route(req, res, url)) return;
     applyCors(req, res, config.corsOrigins);
+    if (url.pathname === '/api/admin/storage/clear' && req.method === 'POST') {
+      if (config.adminToken && req.headers.authorization !== `Bearer ${config.adminToken}`)
+        return sendJson(res, 401, { error: 'unauthorized' });
+      // Custom header prevents cross-site form submissions, including tokenless PoC mode.
+      if (req.headers['x-sportlight-action'] !== 'clear-archived-storage')
+        return sendJson(res, 403, { error: 'invalid_action' });
+      const cutoff = Date.now() - 7 * 86_400_000;
+      let files = 0, bytes = 0;
+      for (const folder of ['history', 'highlights']) {
+        const dir = join(config.dataDir, folder);
+        for (const name of await readdir(dir)) {
+          if (!/^\d{4}-\d{2}-\d{2}\.(json|ndjson)$/.test(name)) continue;
+          if (Date.parse(name.slice(0, 10) + 'T23:59:59Z') >= cutoff) continue;
+          const file = join(dir, name);
+          const info = await stat(file);
+          if (info.mtimeMs >= cutoff) continue;
+          await unlink(file);
+          files++; bytes += info.size;
+        }
+      }
+      return sendJson(res, 200, { files, bytes });
+    }
     if (req.method === 'OPTIONS') return void res.writeHead(204).end();
     if (req.method !== 'GET') return sendJson(res, 405, { error: 'method_not_allowed' });
 
@@ -154,6 +213,20 @@ export async function createApp(config: BackendConfig, log: Logger) {
       return sendJson(res, consumer.stats.connected ? 200 : 503, { amqp: consumer.stats.connected });
     if (path === '/api/config') return sendJson(res, 200, clientConfig);
     if (path === '/api/feeds') return sendJson(res, 200, { serverTime: Date.now(), feeds: store.snapshot() });
+    if (path === '/api/feeds/recent') {
+      // Recent intensity per live run, so clients can draw trend lines straight after connecting.
+      const sec = Math.min(600, Math.max(5, Number(url.searchParams.get('sec')) || 90));
+      const recent = Object.fromEntries(
+        store.snapshot().map((f) => [
+          f.id,
+          {
+            runId: f.runId,
+            points: history.recent(f.id, f.runId, sec).map((p): [number, number] => [p.streamTime, p.score]),
+          },
+        ]),
+      );
+      return sendJson(res, 200, { serverTime: Date.now(), sec, feeds: recent });
+    }
 
     if (path === '/api/highlights') {
       const day = url.searchParams.get('day') || highlights.today();
@@ -231,7 +304,11 @@ export async function createApp(config: BackendConfig, log: Logger) {
         tiles: v.tiles,
         lastStateAgeMs: v.lastStateAt === null ? null : now - v.lastStateAt,
       })),
-      highlights: { day: highlights.today(), count: highlights.list(highlights.today()).length },
+      highlights: {
+        day: highlights.today(),
+        count: highlights.list(highlights.today()).length,
+        captions: { ...captioner.stats },
+      },
       config: {
         selection: config.selection,
         highlights: config.highlights,
@@ -246,10 +323,13 @@ export async function createApp(config: BackendConfig, log: Logger) {
   return {
     async start() {
       consumer.start();
+      content.start();
       await new Promise<void>((resolve) => server.listen(config.port, resolve));
       log.info('backend listening', { port: config.port });
     },
     async stop() {
+      captioner.stop();
+      await content.stop();
       clearInterval(tickTimer);
       clearInterval(pruneTimer);
       await consumer.stop();
@@ -272,8 +352,8 @@ function applyCors(req: IncomingMessage, res: ServerResponse, origins: string[])
   if (!origin) return;
   if (origins.includes('*') || origins.includes(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origins.includes('*') ? '*' : origin);
-    res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Sportlight-Action');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Vary', 'Origin');
   }
 }

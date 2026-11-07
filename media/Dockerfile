@@ -1,9 +1,11 @@
 # syntax=docker/dockerfile:1.7
 # Demo media origin. Build context: ./media
 # Builds (or reuses, if media/dist is present in the context) the transcoded demo library, then
-# serves it with nginx. Downloads come from Wikimedia Commons on first build.
+# serves it with nginx. Downloads full YouTube broadcast replays on first build.
 FROM node:20.18-alpine AS build
-RUN apk add --no-cache ffmpeg
+RUN apk add --no-cache ffmpeg python3 py3-pip
+RUN python3 -m venv /opt/yt-dlp && /opt/yt-dlp/bin/pip install --no-cache-dir "yt-dlp[default]"
+ENV YT_DLP=/opt/yt-dlp/bin/yt-dlp
 WORKDIR /media
 COPY . .
 RUN node build.mjs

@@ -1,6 +1,10 @@
 .page {
-  height: calc(100dvh - var(--header-h) - env(safe-area-inset-top));
-  padding: 0 var(--gutter) var(--gutter);
+  display: flex;
+  flex-direction: column;
+  view-transition-name: sportlight-view;
+  height: calc(100dvh - var(--top-h) - env(safe-area-inset-top));
+  // Leave room for the tiles' 4px outer focus ring below the sticky header.
+  padding: 4px var(--gutter) var(--gutter);
   padding-bottom: max(var(--gutter), env(safe-area-inset-bottom));
   min-height: 360px;
 }
@@ -33,4 +37,9 @@
 .emptyText {
   color: var(--text-muted);
   margin-bottom: 10px;
+}
+
+.viewingArea {
+  flex: 1;
+  min-height: 0;
 }

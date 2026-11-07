@@ -24,6 +24,22 @@ export interface Highlight {
   thumbnailUrl?: string;
   /** Intensity across the clip as [secondsFromClipStart, score] pairs, for the replay curve. */
   curve: Array<[number, number]>;
+  /** Generated name and description. Filled in asynchronously after the highlight is cut. */
+  caption?: HighlightCaption;
+}
+
+export interface HighlightCaption {
+  /** Short, punchy name, e.g. "Late equaliser at the Stade de France". */
+  title: string;
+  /** One or two sentences describing the moment. */
+  description: string;
+  tags: string[];
+  /** Model that wrote it (`template` when no model is configured). */
+  model: string;
+  generatedAt: string;
+  /** Caption pipeline revision and exact source window, used to invalidate stale captions. */
+  version?: string;
+  sourceSignature?: string;
 }
 
 export type HighlightTier = 'large' | 'medium' | 'small';

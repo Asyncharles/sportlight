@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import type { Highlight, HighlightTier } from '@sportlight/shared';
 import { SportIcon } from '../../components/SportIcon';
 import { mediaUrl } from '../../lib/env';
+import { highlightTitle, showsEventSeparately } from '../../lib/highlights';
 import { formatDuration, formatTimeOfDay } from '../../lib/format';
 import { useMediaQuery, useReducedMotion } from '../../lib/hooks';
 import styles from './HighlightTile.module.scss';
@@ -43,7 +44,7 @@ export function HighlightTile({
       onPointerLeave={stop}
       onFocus={start}
       onBlur={stop}
-      aria-label={`${h.event.title}, peak intensity ${Math.round(h.peak.score)}, ${formatDuration(h.clip.durationSec)} at ${formatTimeOfDay(h.peak.at, timezone)}`}
+      aria-label={`${highlightTitle(h)}, ${h.event.title}, peak intensity ${Math.round(h.peak.score)}, ${formatDuration(h.clip.durationSec)} at ${formatTimeOfDay(h.peak.at, timezone)}`}
     >
       {h.thumbnailUrl && (
         <img className={styles.thumb} src={mediaUrl(h.thumbnailUrl)} alt="" loading="lazy" decoding="async" />
@@ -55,9 +56,11 @@ export function HighlightTile({
       <span className={styles.meta}>
         <span className={styles.title}>
           <SportIcon sportId={h.sportId} size={tier === 'small' ? 12 : 14} strokeWidth={2.25} />
-          <span>{h.event.title}</span>
+          <span>{highlightTitle(h)}</span>
         </span>
+        {tier !== 'small' && h.caption?.description && <span className={styles.desc}>{h.caption.description}</span>}
         <span className={styles.detail}>
+          {showsEventSeparately(h) && <span className={styles.event}>{h.event.title}</span>}
           <span className="mono">{formatTimeOfDay(h.peak.at, timezone)}</span>
           <span className="mono">{formatDuration(h.clip.durationSec)}</span>
         </span>

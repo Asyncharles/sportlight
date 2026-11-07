@@ -33,7 +33,11 @@ export interface AdminOverview {
     tiles: ViewerTile[];
     lastStateAgeMs: number | null;
   }>;
-  highlights: { day: string; count: number };
+  highlights: {
+    day: string;
+    count: number;
+    captions: { model: string; generated: number; failed: number; pending: number; lastError: string | null };
+  };
   config: {
     selection: SelectionConfig;
     highlights: HighlightConfig;

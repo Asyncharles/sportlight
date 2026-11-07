@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SELECTION_CONFIG } from './config.js';
 import type { FeedState, Follow } from './domain.js';
-import { emptySelection, promote, reconcile, type SelectionState } from './selection.js';
+import {
+  assign,
+  emptySelection,
+  hurry,
+  keep,
+  promote,
+  reconcile,
+  setPinned,
+  type SelectionState,
+  type ViewerSelectionOptions,
+} from './selection.js';
 
 const config = DEFAULT_SELECTION_CONFIG;
 const allSports: Follow[] = ['football', 'tennis', 'chess', 'esports', 'rugby', 'cycling'].map((id) => ({
@@ -27,8 +37,15 @@ function feed(id: string, score: number, patch: Partial<FeedState> = {}): FeedSt
   };
 }
 
-function run(state: SelectionState, feeds: FeedState[], now: number, follows = allSports, votes = {}) {
-  return reconcile(state, { feeds, follows, votes, now, config });
+function run(
+  state: SelectionState,
+  feeds: FeedState[],
+  now: number,
+  follows = allSports,
+  votes = {},
+  options: ViewerSelectionOptions = {},
+) {
+  return reconcile(state, { feeds, follows, votes, now, config, ...options });
 }
 
 const ids = (s: SelectionState) => [
@@ -166,5 +183,145 @@ describe('reconcile', () => {
     ];
     for (let t = 30_000; t <= 45_000; t += 1000) s = run(s, hot, t).state;
     expect(s.slots['side-3']?.feedId).toBe('a');
+  });
+});
+
+describe('viewer options', () => {
+  const base = [feed('a', 90), feed('b', 70), feed('c', 60), feed('d', 50)];
+  const opts = (o: ViewerSelectionOptions) => (s: SelectionState, feeds: FeedState[], now: number) =>
+    run(s, feeds, now, allSports, {}, o);
+
+  it('announces a pending switch for the countdown, then switches', () => {
+    const step = opts({ countdownMs: 4000 });
+    let s = step(emptySelection(), [...base, feed('x', 20)], 0).state;
+    const hot = [...base, feed('x', 70)];
+    s = step(s, hot, 25_000).state; // challenge starts
+    let r = step(s, hot, 27_000);
+    expect(r.upcoming).toEqual([]);
+    r = step(r.state, hot, 28_000); // challenge window passed: countdown begins
+    expect(r.upcoming).toEqual([
+      { slot: 'side-3', feedId: 'x', previous: 'd', kind: 'replace', since: 28_000, at: 32_000, key: 'x' },
+    ]);
+    r = step(r.state, hot, 31_000);
+    expect(r.state.slots['side-3']?.feedId).toBe('d');
+    r = step(r.state, hot, 32_000);
+    expect(r.state.slots['side-3']?.feedId).toBe('x');
+    expect(r.upcoming).toEqual([]);
+  });
+
+  it('cancels a pending switch when the challenger falls back or the viewer keeps the feed', () => {
+    const step = opts({ countdownMs: 4000 });
+    let s = step(emptySelection(), base, 0).state;
+    const hot = [...base, feed('x', 70)];
+    s = step(s, hot, 25_000).state;
+    s = step(s, hot, 29_000).state;
+    s = step(s, [...base, feed('x', 52)], 30_000).state;
+    expect(step(s, hot, 31_000).upcoming).toEqual([]);
+
+    s = step(s, hot, 31_000).state;
+    const r = step(s, hot, 35_000);
+    expect(r.upcoming).toHaveLength(1);
+    s = keep(r.state, 'side-3', 35_000);
+    const after = step(s, hot, 45_000);
+    expect(after.state.slots['side-3']?.feedId).toBe('d');
+    expect(after.upcoming).toEqual([]);
+  });
+
+  it('switches immediately when hurried', () => {
+    const step = opts({ countdownMs: 8000 });
+    let s = step(emptySelection(), base, 0).state;
+    const hot = [...base, feed('x', 70)];
+    s = step(s, hot, 25_000).state;
+    const r = step(s, hot, 28_000);
+    expect(r.upcoming).toHaveLength(1);
+    s = hurry(r.state, r.upcoming[0]!.key);
+    expect(step(s, hot, 28_500).state.slots['side-3']?.feedId).toBe('x');
+  });
+
+  it('makes no automatic replacements while locked, but still removes ended feeds', () => {
+    const step = opts({ locked: true });
+    let s = step(emptySelection(), [...base, feed('e', 10)], 0).state;
+    for (let t = 20_000; t <= 40_000; t += 1000) s = step(s, [...base, feed('e', 10), feed('x', 99)], t).state;
+    expect(ids(s)).toEqual(['a', 'b', 'c', 'd']);
+    const ended = base.map((f) => (f.id === 'b' ? { ...f, status: 'ended' as const } : f));
+    s = step(s, [...ended, feed('x', 99)], 41_000).state;
+    expect(ids(s)).toEqual(['a', 'x', 'c', 'd']);
+  });
+
+  it('uses only the side windows the layout shows', () => {
+    const step = opts({ sideSlots: ['side-1', 'side-2'] });
+    let r = step(emptySelection(), base, 0);
+    expect(ids(r.state)).toEqual(['a', 'b', 'c', undefined]);
+
+    // Switching from a three-window layout drops the third.
+    const full = run(emptySelection(), base, 0).state;
+    r = step(full, base, 1000);
+    expect(ids(r.state)).toEqual(['a', 'b', 'c', undefined]);
+    expect(r.changes).toContainEqual({ type: 'removed', slot: 'side-3', feedId: 'd', reason: 'layout' });
+  });
+
+  it('follows the action in main when asked to, swapping with the side feed', () => {
+    const step = opts({ mainPolicy: 'follow', countdownMs: 2000 });
+    let s = step(emptySelection(), base, 0).state;
+    const surge = base.map((f) => (f.id === 'c' ? { ...f, intensity: { ...f.intensity!, score: 100 } } : f));
+    s = step(s, surge, 20_000).state;
+    let r = step(s, surge, 23_000);
+    expect(r.upcoming).toEqual([
+      { slot: 'main', feedId: 'c', previous: 'a', kind: 'promote', since: 23_000, at: 25_000, key: 'main>c' },
+    ]);
+    r = step(r.state, surge, 25_000);
+    expect(ids(r.state)).toEqual(['c', 'b', 'a', 'd']);
+  });
+
+  it('never replaces a pinned side window, and challenges the next weakest instead', () => {
+    let s = run(emptySelection(), [...base, feed('e', 10)], 0).state;
+    s = setPinned(s, 'side-3', true, 0); // d is the weakest
+    for (let t = 20_000; t <= 40_000; t += 1000) s = run(s, [...base, feed('x', 99)], t).state;
+    expect(ids(s)).toEqual(['a', 'b', 'x', 'd']);
+    expect(s.slots['side-3']?.pinned).toBe(true);
+  });
+
+  it('does not let a pinned main be taken over, nor pull a pinned side feed into main', () => {
+    const step = opts({ mainPolicy: 'follow' });
+    const surge = base.map((f) => (f.id === 'c' ? { ...f, intensity: { ...f.intensity!, score: 100 } } : f));
+    let s = setPinned(step(emptySelection(), base, 0).state, 'main', true, 0);
+    for (let t = 20_000; t <= 40_000; t += 1000) s = step(s, surge, t).state;
+    expect(ids(s)).toEqual(['a', 'b', 'c', 'd']);
+    s = setPinned(setPinned(s, 'main', false, 40_000), 'side-2', true, 40_000);
+    for (let t = 41_000; t <= 80_000; t += 1000) s = step(s, surge, t).state;
+    expect(ids(s)).toEqual(['a', 'b', 'c', 'd']);
+  });
+
+  it('assigns a chosen feed to a window and pins it, swapping if it is already shown', () => {
+    let s = run(emptySelection(), [...base, feed('e', 10)], 0).state;
+    s = assign(s, 'side-1', 'e', 1000);
+    expect(ids(s)).toEqual(['a', 'e', 'c', 'd']);
+    expect(s.slots['side-1']).toMatchObject({ feedId: 'e', pinned: true });
+    s = assign(s, 'main', 'd', 2000);
+    expect(ids(s)).toEqual(['d', 'e', 'c', 'a']);
+    expect(s.slots['side-3']?.pinned).toBeUndefined();
+    // Survives reconcile even though b now out-ranks it.
+    s = run(s, [...base, feed('e', 10)], 60_000).state;
+    expect(s.slots['side-1']).toMatchObject({ feedId: 'e', pinned: true });
+  });
+
+  it('keeps a pinned feed that no longer matches the follows while it is live', () => {
+    const feeds = [...base, feed('t', 5, { sportId: 'tennis' })];
+    const football: Follow[] = [{ kind: 'sport', id: 'football' }];
+    let s = assign(run(emptySelection(), feeds, 0, football).state, 'side-2', 't', 0);
+    s = run(s, feeds, 1000, football).state;
+    expect(s.slots['side-2']?.feedId).toBe('t');
+    const ended = feeds.map((f) => (f.id === 't' ? { ...f, status: 'ended' as const } : f));
+    s = run(s, ended, 2000, football).state;
+    expect(s.slots['side-2']?.feedId).not.toBe('t');
+    expect(s.slots['side-2']?.pinned).toBeUndefined();
+  });
+
+  it('carries the pin with the feed when promoted', () => {
+    let s = setPinned(run(emptySelection(), base, 0).state, 'side-2', true, 0);
+    s = promote(s, 'c', 1000);
+    expect(ids(s)).toEqual(['c', 'b', 'a', 'd']);
+    expect(s.slots.main?.pinned).toBe(true);
+    expect(s.slots['side-2']?.pinned).toBeUndefined();
   });
 });
