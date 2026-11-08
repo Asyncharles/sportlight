@@ -44,7 +44,15 @@ npm run media:local -- --from=C:/footage/clips      # or the VM's data/samples
 LOCAL_FOOTAGE_DIR=C:/footage/clips npm run dev       # Vite serves the clips at /media/local/videos
 ```
 
-In Docker, add the overlay: `LOCAL_FOOTAGE_DIR=... docker compose -f docker-compose.yml -f docker-compose.local-feeds.yml up --build`. Don't combine it with the public GCP deploy.
+In Docker, add the overlay: `LOCAL_FOOTAGE_DIR=... docker compose -f docker-compose.yml -f docker-compose.local-feeds.yml up --build`.
+
+**Extra feeds.** `local-sources.json` also lists the 13 tuning clips with `role: "extra"`. Point `--from` at a folder laid out like the bucket's `samples/` (demo clips at the top, `tuning/<sport>/` below). While the demo feeds are on air, the publisher marks every other feed (tuning clips and open clips) as `extra`. Viewers see those only after turning on **Settings → Your sports → Extra feeds**. Their intensity is simulated.
+
+**On the GCP site, for a demo.** Run the deploy workflow with `demo_footage` ticked. The VM pulls `gs://<bucket>/samples/` (except `timing_audio_only/`), and the posters, thumbnails and catalog from `gs://<bucket>/sportlight-local/`, then starts with the overlay. `demo_feed_set` picks `all` (also publish the open clips as extra feeds) or `local` (only our footage). The landing page then leads with these broadcasts. To take the footage down, redeploy with `demo_footage` unticked: the VM deletes it. One-off setup:
+
+- Upload the posters, thumbnails and catalog once, after `npm run media:local`: `gcloud storage cp -r media/dist/local/* gs://<bucket>/sportlight-local/`.
+- The VM's service account needs read access to the bucket.
+- The bucket defaults to `sportlight-514020-si-private`; set the repository variable `DEMO_FOOTAGE_BUCKET` to change it.
 
 **Shared clock.** The engine's clock is `t_video`, the position in the looping MP4: `(now − pusher start) mod duration`. Sportlight plays the same file at the same position. The publisher sets each run's `mediaOffsetSec` so the browser's live position equals the engine's, and it sends `feed.updated` with a new offset if the clock moves. Runs still start at "now", because the backend ignores runs that start earlier than the one it has. Each feed's clock start comes from:
 

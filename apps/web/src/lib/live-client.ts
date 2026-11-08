@@ -9,6 +9,9 @@ import {
   type ServerMessage,
 } from '@sportlight/shared';
 import { wsUrl } from './env';
+import { useMemo } from 'react';
+import { countExtra, withoutExtra } from './extra-feeds';
+import { preferencesStore } from './preferences';
 import { Store, storage, useStore } from './store';
 
 export type ConnectionStatus = 'connecting' | 'open' | 'reconnecting';
@@ -219,6 +222,17 @@ class LiveClient {
 
 export const live = new LiveClient();
 
+/**
+ * Live state as this viewer sees it: feeds marked `extra` are left out unless they turned on extra
+ * feeds in Settings. Everything that lists feeds goes through here, so they all agree.
+ */
 export function useLive(): LiveState {
-  return useStore(live.store);
+  const state = useStore(live.store);
+  const showExtra = useStore(preferencesStore).extraFeeds;
+  return useMemo(() => (showExtra ? state : { ...state, feeds: withoutExtra(state.feeds) }), [state, showExtra]);
+}
+
+/** How many extra feeds the provider is offering right now, whether or not this viewer shows them. */
+export function useExtraFeedCount(): number {
+  return countExtra(useStore(live.store).feeds);
 }

@@ -52,6 +52,8 @@ export interface Preferences {
   colour: ColourTheme;
   motion: MotionPreference;
   live: LivePreferences;
+  /** Show extra sample feeds (marked `extra` by the provider) alongside the main demo feeds. */
+  extraFeeds: boolean;
 }
 
 const KEY = 'sportlight.prefs.v1';
@@ -73,6 +75,7 @@ const DEFAULTS: Preferences = {
   colour: 'violet',
   motion: 'system',
   live: DEFAULT_LIVE_PREFERENCES,
+  extraFeeds: false,
 };
 
 function load(): Preferences {

@@ -1,5 +1,5 @@
 {
-  "comment": "Engine demo feeds played from local footage (npm run media:local). ids are the engine's feed_id in SportlightEngine/config/feeds.yaml; file is the sample's file name. The footage is private broadcast video: it is never copied into the repo, Docker images or anything public.",
+  "comment": "Engine feeds played from local footage (npm run media:local -- --from=<samples dir>). role demo: the engine's demo feeds (id = feed_id in SportlightEngine/config/feeds.yaml), always on air with engine scores. role extra: the tuning clips, shown only when a viewer turns on extra feeds in Settings, with simulated intensity. file is the path under samples/. The footage is private broadcast video: never copied into the repo or a Docker image.",
   "thumbnailIntervalSec": 10,
   "clips": [
     {
@@ -10,9 +10,13 @@
       "event": {
         "title": "Argentina v France",
         "subtitle": "2022 FIFA World Cup · Final",
-        "broadcaster": { "name": "FIFA", "channel": "YouTube replay" }
+        "broadcaster": {
+          "name": "FIFA",
+          "channel": "YouTube replay"
+        }
       },
-      "sourceUrl": "https://www.youtube.com/watch?v=RgqKdplLIk4"
+      "sourceUrl": "https://www.youtube.com/watch?v=RgqKdplLIk4",
+      "role": "demo"
     },
     {
       "id": "f1-demo-race",
@@ -22,9 +26,13 @@
       "event": {
         "title": "Brazilian Grand Prix",
         "subtitle": "Formula 1 2019 · Lap 45 to the flag",
-        "broadcaster": { "name": "Sky Sports", "channel": "Sky Sports F1" }
+        "broadcaster": {
+          "name": "Sky Sports",
+          "channel": "Sky Sports F1"
+        }
       },
-      "sourceUrl": "https://www.youtube.com/watch?v=-3EHB0IqOnw"
+      "sourceUrl": "https://www.youtube.com/watch?v=-3EHB0IqOnw",
+      "role": "demo"
     },
     {
       "id": "nba-demo-game",
@@ -34,9 +42,13 @@
       "event": {
         "title": "Cavaliers @ Warriors",
         "subtitle": "2016 NBA Finals · Game 7",
-        "broadcaster": { "name": "ESPN", "channel": "YouTube replay" }
+        "broadcaster": {
+          "name": "ESPN",
+          "channel": "YouTube replay"
+        }
       },
-      "sourceUrl": "https://www.youtube.com/watch?v=EoVTttvKfRs"
+      "sourceUrl": "https://www.youtube.com/watch?v=EoVTttvKfRs",
+      "role": "demo"
     },
     {
       "id": "wl-demo-session",
@@ -46,9 +58,221 @@
       "event": {
         "title": "Men's 79 kg, Group A",
         "subtitle": "2025 World Weightlifting Championships · Førde",
-        "broadcaster": { "name": "Weightlifting House", "channel": "YouTube replay" }
+        "broadcaster": {
+          "name": "Weightlifting House",
+          "channel": "YouTube replay"
+        }
       },
-      "sourceUrl": "https://www.youtube.com/watch?v=2JRPzQ7QYgY"
+      "sourceUrl": "https://www.youtube.com/watch?v=2JRPzQ7QYgY",
+      "role": "demo"
+    },
+    {
+      "id": "fb-cro-bra-2022",
+      "role": "extra",
+      "file": "tuning/football/fb_cro_bra_2022.mp4",
+      "sportId": "football",
+      "competitionId": "fifa-world-cup",
+      "event": {
+        "title": "Croatia v Brazil",
+        "subtitle": "2022 FIFA World Cup · Quarter-final",
+        "broadcaster": {
+          "name": "FIFA",
+          "channel": "YouTube replay"
+        }
+      },
+      "sourceUrl": "https://www.youtube.com/watch?v=HxBqMbI5kqQ"
+    },
+    {
+      "id": "fb-net-arg-2022",
+      "role": "extra",
+      "file": "tuning/football/fb_net_arg_2022.mp4",
+      "sportId": "football",
+      "competitionId": "fifa-world-cup",
+      "event": {
+        "title": "Netherlands v Argentina",
+        "subtitle": "2022 FIFA World Cup · Quarter-final",
+        "broadcaster": {
+          "name": "FIFA",
+          "channel": "YouTube replay"
+        }
+      },
+      "sourceUrl": "https://www.youtube.com/watch?v=QIpZ1pad73w"
+    },
+    {
+      "id": "fb-spa-mor-2018",
+      "role": "extra",
+      "file": "tuning/football/fb_spa_mor_2018.mp4",
+      "sportId": "football",
+      "competitionId": "fifa-world-cup",
+      "event": {
+        "title": "Spain v Morocco",
+        "subtitle": "2018 FIFA World Cup · Group stage",
+        "broadcaster": {
+          "name": "FIFA",
+          "channel": "YouTube replay"
+        }
+      },
+      "sourceUrl": "https://www.youtube.com/watch?v=A9ad17VZvs8"
+    },
+    {
+      "id": "fb-sou-ger-2018",
+      "role": "extra",
+      "file": "tuning/football/fb_sou_ger_2018.mp4",
+      "sportId": "football",
+      "competitionId": "fifa-world-cup",
+      "event": {
+        "title": "South Korea v Germany",
+        "subtitle": "2018 FIFA World Cup · Group stage",
+        "broadcaster": {
+          "name": "FIFA",
+          "channel": "YouTube replay"
+        }
+      },
+      "sourceUrl": "https://www.youtube.com/watch?v=DdnvC6-PGYY"
+    },
+    {
+      "id": "f1-2019-bahrain",
+      "role": "extra",
+      "file": "tuning/f1/f1_2019_bahrain_gp.mp4",
+      "sportId": "motorsport",
+      "competitionId": "formula-1",
+      "event": {
+        "title": "Bahrain Grand Prix",
+        "subtitle": "Formula 1 2019 · Lap 40 to the flag",
+        "broadcaster": {
+          "name": "Formula 1",
+          "channel": "YouTube replay"
+        }
+      },
+      "sourceUrl": "https://www.youtube.com/watch?v=j2RVH7ByNTc"
+    },
+    {
+      "id": "f1-2019-italian",
+      "role": "extra",
+      "file": "tuning/f1/f1_2019_italian_gp.mp4",
+      "sportId": "motorsport",
+      "competitionId": "formula-1",
+      "event": {
+        "title": "Italian Grand Prix",
+        "subtitle": "Formula 1 2019 · Last 20 laps",
+        "broadcaster": {
+          "name": "Formula 1",
+          "channel": "YouTube replay"
+        }
+      },
+      "sourceUrl": "https://www.youtube.com/watch?v=QNCiAYtUt-Q"
+    },
+    {
+      "id": "nba-2013-gsw-sas",
+      "role": "extra",
+      "file": "tuning/nba/nba_20130506_gsw_sas.mp4",
+      "sportId": "basketball",
+      "competitionId": "nba",
+      "event": {
+        "title": "Warriors @ Spurs",
+        "subtitle": "2013 NBA West semis · Game 1",
+        "broadcaster": {
+          "name": "NBA",
+          "channel": "YouTube replay"
+        }
+      },
+      "sourceUrl": "https://www.youtube.com/watch?v=SnNSIiSs-Yk"
+    },
+    {
+      "id": "nba-2013-okc-mem",
+      "role": "extra",
+      "file": "tuning/nba/nba_20130513_okc_mem.mp4",
+      "sportId": "basketball",
+      "competitionId": "nba",
+      "event": {
+        "title": "Thunder @ Grizzlies",
+        "subtitle": "2013 NBA West semis · Game 4",
+        "broadcaster": {
+          "name": "NBA",
+          "channel": "YouTube replay"
+        }
+      },
+      "sourceUrl": "https://www.youtube.com/watch?v=WNIHa4V47UI"
+    },
+    {
+      "id": "nba-2017-bos-was",
+      "role": "extra",
+      "file": "tuning/nba/nba_20170512_bos_was.mp4",
+      "sportId": "basketball",
+      "competitionId": "nba",
+      "event": {
+        "title": "Celtics @ Wizards",
+        "subtitle": "2017 NBA East semis · Game 6",
+        "broadcaster": {
+          "name": "NBA",
+          "channel": "YouTube replay"
+        }
+      },
+      "sourceUrl": "https://www.youtube.com/watch?v=7Ms-s5zVByE"
+    },
+    {
+      "id": "nba-2022-bkn-bos",
+      "role": "extra",
+      "file": "tuning/nba/nba_20220417_bkn_bos.mp4",
+      "sportId": "basketball",
+      "competitionId": "nba",
+      "event": {
+        "title": "Nets @ Celtics",
+        "subtitle": "2022 NBA East first round · Game 1",
+        "broadcaster": {
+          "name": "NBA",
+          "channel": "YouTube replay"
+        }
+      },
+      "sourceUrl": "https://www.youtube.com/watch?v=Cm4PtLhM1pQ"
+    },
+    {
+      "id": "wl-2025-m71",
+      "role": "extra",
+      "file": "tuning/weightlifting/wl_worlds2025_m71.mp4",
+      "sportId": "weightlifting",
+      "competitionId": "iwf-worlds",
+      "event": {
+        "title": "Men's 71 kg, Group A",
+        "subtitle": "2025 World Weightlifting Championships · Førde",
+        "broadcaster": {
+          "name": "Weightlifting House",
+          "channel": "YouTube replay"
+        }
+      },
+      "sourceUrl": "https://www.youtube.com/watch?v=pPuMKQokgQ4"
+    },
+    {
+      "id": "wl-2025-m88",
+      "role": "extra",
+      "file": "tuning/weightlifting/wl_worlds2025_m88.mp4",
+      "sportId": "weightlifting",
+      "competitionId": "iwf-worlds",
+      "event": {
+        "title": "Men's 88 kg, Group A",
+        "subtitle": "2025 World Weightlifting Championships · Førde",
+        "broadcaster": {
+          "name": "Weightlifting House",
+          "channel": "YouTube replay"
+        }
+      },
+      "sourceUrl": "https://www.youtube.com/watch?v=Po_Kfd9vG4s"
+    },
+    {
+      "id": "wl-2025-m94",
+      "role": "extra",
+      "file": "tuning/weightlifting/wl_worlds2025_m94.mp4",
+      "sportId": "weightlifting",
+      "competitionId": "iwf-worlds",
+      "event": {
+        "title": "Men's 94 kg, Group A",
+        "subtitle": "2025 World Weightlifting Championships · Førde",
+        "broadcaster": {
+          "name": "Weightlifting House",
+          "channel": "YouTube replay"
+        }
+      },
+      "sourceUrl": "https://www.youtube.com/watch?v=HKfaGQ_adIs"
     }
   ]
 }

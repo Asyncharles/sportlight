@@ -18,6 +18,7 @@ export const EventInfoSchema = z.object({
   teamIds: z.array(id).max(16).optional(),
   venue: z.string().max(200).optional(),
   broadcaster: z.object({ name: z.string().min(1).max(120), channel: z.string().max(120).optional() }).optional(),
+  extra: z.boolean().optional(),
 });
 
 export const MediaSourceSchema = z.object({

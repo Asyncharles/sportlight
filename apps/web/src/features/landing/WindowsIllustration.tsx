@@ -3,6 +3,7 @@ import { ArrowUp, Volume2 } from 'lucide-react';
 import { getSport, type FeedState } from '@sportlight/shared';
 import { SportIcon } from '../../components/SportIcon';
 import { useReducedMotion } from '../../lib/hooks';
+import { broadcastSports, useMediaCatalog } from '../../lib/media-catalog';
 import { sportMedia } from '../../lib/sport-media';
 import styles from './WindowsIllustration.module.scss';
 
@@ -19,7 +20,21 @@ const CHALLENGE_AT = 5;
 const CHALLENGE_TICKS = 4;
 const SWAP_AT = CHALLENGE_AT + CHALLENGE_TICKS;
 
-const ORDER = ['football', 'tennis', 'motorsport', 'basketball', 'rugby', 'ice-hockey', 'cycling', 'athletics', 'esports'];
+/** Sports the open media set has clips for. */
+const ORDER = ['football', 'tennis', 'motorsport', 'basketball', 'rugby', 'ice-hockey', 'cycling', 'athletics', 'chess'];
+/** Sports we have real broadcasts for (the demo footage). When mounted, they fill the four windows. */
+const BROADCAST_ORDER = ['football', 'motorsport', 'basketball', 'weightlifting'];
+
+/**
+ * Broadcast sports first (so they open in the windows), then open-footage sports as challengers.
+ * With all four windows on broadcasts, one challenger is enough to act out a swap, and it keeps
+ * at most one window off the broadcasts: the swapped-out broadcast challenges straight back.
+ */
+export function stageOrder(broadcast: readonly string[]): string[] {
+  const lead = BROADCAST_ORDER.filter((sport) => broadcast.includes(sport));
+  if (lead.length >= 4) return [...lead, 'athletics'];
+  return [...lead, ...ORDER.filter((sport) => !lead.includes(sport))];
+}
 
 interface StageState {
   n: number;
@@ -32,17 +47,15 @@ interface StageState {
   swapped: number | null;
 }
 
-const initial: StageState = {
-  n: 0,
-  slots: ORDER.slice(0, 4),
-  pool: ORDER.slice(4),
-  challenge: null,
-  hot: null,
-  swapped: null,
-};
+function initialFor(order: readonly string[]): StageState {
+  return { n: 0, slots: order.slice(0, 4), pool: order.slice(4), challenge: null, hot: null, swapped: null };
+}
+
+/** Stable per-sport offset so each window's score has its own rhythm. */
+const offset = (sport: string) => [...sport].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 997, 7) % 9;
 
 function baseScore(sport: string, n: number, hot: string | null): number {
-  const i = ORDER.indexOf(sport);
+  const i = offset(sport);
   const base = 64 + ((i * 7) % 16) + (sport === hot ? 12 : 0);
   return Math.max(40, Math.min(97, Math.round(base + 5 * Math.sin(n * 0.55 + i * 1.7))));
 }
@@ -66,7 +79,16 @@ function step(s: StageState): StageState {
 
 export function WindowsIllustration({ feeds = [] }: { feeds?: readonly FeedState[] }) {
   const reduced = useReducedMotion();
-  const [s, tick] = useReducer(step, initial);
+  const catalog = useMediaCatalog();
+  const order = useMemo(() => stageOrder(broadcastSports()), [catalog]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Advance one tick, or restart when the sports on offer change (the catalog arrived).
+  const [s, dispatch] = useReducer(
+    (state: StageState, action: { reset?: StageState }) => action.reset ?? step(state),
+    order,
+    initialFor,
+  );
+  const tick = () => dispatch({});
+  useEffect(() => dispatch({ reset: initialFor(order) }), [order]);
 
   useEffect(() => {
     if (reduced) return;
@@ -184,8 +206,10 @@ function Window({
 }
 
 function Media({ sport, feeds, playing }: { sport: string; feeds: readonly FeedState[]; playing: boolean }) {
-  // Resolve once per layer so a live snapshot arriving later doesn't restart the clip.
-  const media = useMemo(() => sportMedia(sport, feeds), [sport]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Resolve once per layer (and once the media catalog arrives) so a live snapshot arriving later
+  // doesn't restart the clip.
+  const catalog = useMediaCatalog();
+  const media = useMemo(() => sportMedia(sport, feeds), [sport, catalog]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div className={styles.media}>
       {media.poster && <img src={media.poster} alt="" className={styles.poster} draggable={false} />}

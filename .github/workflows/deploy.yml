@@ -12,6 +12,15 @@ on:
         description: Deploy even though the demo freeze has started
         type: boolean
         default: false
+      demo_footage:
+        description: Serve the private demo clips (4 demo feeds, plus 13 extra feeds viewers can turn on in Settings). Redeploy without it to take them down
+        type: boolean
+        default: false
+      demo_feed_set:
+        description: With demo footage, which feeds are published (all = also the open clips as extra feeds; local = only our footage)
+        type: choice
+        options: [all, local]
+        default: all
 
 permissions: {}
 
@@ -32,7 +41,10 @@ jobs:
       ZONE: ${{ vars.GCP_ZONE }}
       VM: si-web
       IMAGE_TAG: ${{ inputs.image_tag || github.sha }}
-      RELEASE_PATHS: docker-compose.yml docker-compose.external.yml docker deploy
+      RELEASE_PATHS: docker-compose.yml docker-compose.external.yml docker-compose.local-feeds.yml docker deploy
+      DEMO_FOOTAGE: ${{ inputs.demo_footage }}
+      DEMO_FOOTAGE_BUCKET: ${{ vars.DEMO_FOOTAGE_BUCKET || 'sportlight-514020-si-private' }}
+      DEMO_FEED_SET: ${{ inputs.demo_feed_set }}
     steps:
       - name: Demo freeze
         env:
@@ -62,6 +74,10 @@ jobs:
               --format='value(image_summary.digest)')
             echo "IMAGE_SPORTLIGHT_${i^^}=$AR_REPO/sportlight-$i@$digest"
           done > release.env
+          if [[ "$DEMO_FOOTAGE" == true ]]; then
+            echo "DEMO_FOOTAGE_BUCKET=$DEMO_FOOTAGE_BUCKET" >> release.env
+            echo "DEMO_FEED_SET=$DEMO_FEED_SET" >> release.env
+          fi
           cat release.env
           tar -czf release.tgz release.env $RELEASE_PATHS
 

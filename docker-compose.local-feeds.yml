@@ -3,7 +3,7 @@
 #   LOCAL_FOOTAGE_DIR=<footage dir> docker compose -f docker-compose.yml -f docker-compose.local-feeds.yml up --build
 #
 # The footage is private broadcast video. It is mounted read-only at run time, never built into an
-# image. Do not use this overlay with deploy/compose.gcp.yml unless the site is closed to the public.
+# image. On the GCP VM, deploy with the workflow's demo_footage switch instead (deploy/remote-up.sh).
 #
 # Shared clock with SportlightEngine (optional; see README "Engine demo feeds"):
 #   ENGINE_SCORES_URL=ws://host.docker.internal:8000/ws/scores   engine scores replace simulated intensity
@@ -12,7 +12,7 @@
 services:
   media:
     volumes:
-      - ./media/dist/local:/usr/share/nginx/media/local:ro
+      - ${LOCAL_MEDIA_DIR:-./media/dist/local}:/usr/share/nginx/media/local:ro
       - ${LOCAL_FOOTAGE_DIR:?Set LOCAL_FOOTAGE_DIR to the folder with the demo MP4s}:/usr/share/nginx/media/local/videos:ro
 
   publisher:

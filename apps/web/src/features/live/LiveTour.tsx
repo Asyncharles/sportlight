@@ -5,6 +5,7 @@ import { SPORTS, type FeedState, type MainPolicy, type SportId } from '@sportlig
 import { SportIcon } from '../../components/SportIcon';
 import { useLive } from '../../lib/live-client';
 import { usePreferences } from '../../lib/preferences';
+import { useMediaCatalog } from '../../lib/media-catalog';
 import { sportLiveStats, sportMedia } from '../../lib/sport-media';
 import styles from './LiveTour.module.scss';
 
@@ -165,6 +166,7 @@ function SportsStep({
   selected: SportId[];
   onChange: (ids: SportId[]) => void;
 }) {
+  useMediaCatalog(); // tile imagery; re-renders when the catalog arrives
   const toggle = (id: SportId) => onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
   const allSelected = selected.length === SPORTS.length;
 
