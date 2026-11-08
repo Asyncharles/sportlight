@@ -12,6 +12,7 @@ export const SPORTS: readonly Sport[] = [
   { id: 'athletics', name: 'Athletics', icon: 'footprints' },
   { id: 'chess', name: 'Chess', icon: 'chess-knight' },
   { id: 'esports', name: 'Esports', icon: 'gamepad-2' },
+  { id: 'weightlifting', name: 'Weightlifting', icon: 'dumbbell' },
 ];
 
 export const COMPETITIONS: readonly Competition[] = [
@@ -26,6 +27,9 @@ export const COMPETITIONS: readonly Competition[] = [
   { id: 'diamond-league', sportId: 'athletics', name: 'Diamond League' },
   { id: 'blitz-open', sportId: 'chess', name: 'Blitz Open' },
   { id: 'allied-esports', sportId: 'esports', name: 'Tournament of Champions' },
+  { id: 'nba', sportId: 'basketball', name: 'NBA' },
+  { id: 'fifa-world-cup', sportId: 'football', name: 'FIFA World Cup' },
+  { id: 'iwf-worlds', sportId: 'weightlifting', name: 'World Weightlifting Championships' },
 ];
 
 export const TEAMS: readonly Team[] = [

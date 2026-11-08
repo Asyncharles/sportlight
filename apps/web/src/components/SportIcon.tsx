@@ -2,6 +2,7 @@ import {
   BallWave,
   Bike,
   ChessKnight,
+  Dumbbell,
   Flag,
   Footprints,
   Gamepad2,
@@ -26,6 +27,7 @@ const ICONS: Record<SportIconName, LucideIcon> = {
   'chess-knight': ChessKnight,
   'gamepad-2': Gamepad2,
   footprints: Footprints,
+  dumbbell: Dumbbell,
 };
 
 export function SportIcon({ sportId, ...props }: { sportId: string } & LucideProps) {

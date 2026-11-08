@@ -23,6 +23,7 @@
     "media:discover": "python3 media/collect-open.py --discover",
     "media:prune": "python3 media/collect-open.py --prune",
     "media:replays": "node media/build.mjs",
+    "media:local": "node media/import-local.mjs",
     "captions:server": "llama-server -hf ggml-org/Qwen2.5-VL-7B-Instruct-GGUF:Q4_K_M --host 127.0.0.1 --port 8081 -c 16384 -np 1 --jinja"
   },
   "devDependencies": {
