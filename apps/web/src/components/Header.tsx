@@ -1,15 +1,15 @@
 import { Link, NavLink, useMatch } from 'react-router-dom';
-import { Activity, ArrowLeft, ArrowRight, Box, Check, Clapperboard, ChevronDown, Columns2, Grid2x2, Lock, LockOpen, PanelLeft, RectangleHorizontal, Settings, SlidersHorizontal, Trophy } from 'lucide-react';
+import { Activity, ArrowLeft, ArrowRight, Box, Check, Clapperboard, ChevronDown, Columns2, Grid2x2, Lock, LockOpen, MoreHorizontal, PanelLeft, PanelTop, Rows3, Rows4, RectangleHorizontal, Settings, SlidersHorizontal, Trophy } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { useNow } from '../lib/hooks';
+import { useIsPhone, useNow } from '../lib/hooks';
 import { switchView } from '../lib/view-transition';
 import { useLive } from '../lib/live-client';
-import { useLiveUi } from '../lib/live-ui';
+import { activeLayout, useLiveUi } from '../lib/live-ui';
 import { useBestUi } from '../lib/best-ui';
 import { BestFilterDialog } from './BestFilterDialog';
 import { formatClock } from '../lib/format';
-import { usePreferences, type LayoutId } from '../lib/preferences';
-import { Logo } from './Logo';
+import { usePreferences, type LayoutId, type PhoneLayoutId } from '../lib/preferences';
+import { Logo, LogoMark } from './Logo';
 import { VoiceControl } from '../features/live/VoiceControl';
 import styles from './Header.module.scss';
 
@@ -19,9 +19,7 @@ export function Header() {
     return (
       <header className={styles.header}>
         <div className={styles.left}>
-          <Link to="/" className={styles.brand} aria-label="Sportlight home">
-            <Logo height={24} />
-          </Link>
+          <Brand />
           <Link to="/live" className={styles.backLink}>
             <ArrowLeft size={16} aria-hidden />
             <span>Back to live</span>
@@ -30,11 +28,11 @@ export function Header() {
         <nav className={styles.right} aria-label="Admin">
           <NavLink to="/admin" end className={({ isActive }) => `${styles.navLink} ${isActive ? styles.active : ''}`}>
             <Activity size={18} aria-hidden />
-            <span>Operations</span>
+            <span className={styles.collapsible}>Operations</span>
           </NavLink>
           <NavLink to="/admin/shorts" className={({ isActive }) => `${styles.navLink} ${isActive ? styles.active : ''}`}>
             <Clapperboard size={18} aria-hidden />
-            <span>Shorts</span>
+            <span className={styles.collapsible}>Shorts</span>
           </NavLink>
         </nav>
       </header>
@@ -43,28 +41,89 @@ export function Header() {
   return (
     <header className={styles.header}>
       <div className={styles.left}>
-        <Link to="/" className={styles.brand} aria-label="Sportlight home">
-          <Logo height={24} />
-        </Link>
+        <Brand />
         <LiveIndicator />
         <BestOfTodayLink />
       </div>
       <nav className={styles.right} aria-label="Main">
-        <NavLink to="/admin" className={({ isActive }) => `${styles.navLink} ${isActive ? styles.active : ''}`} aria-label="Admin dashboard" title="Admin dashboard"><Grid2x2 size={18} /><span>Admin</span></NavLink>
+        <NavLink to="/admin" className={({ isActive }) => `${styles.navLink} ${styles.desktopOnly} ${isActive ? styles.active : ''}`} aria-label="Admin dashboard" title="Admin dashboard"><Grid2x2 size={18} /><span>Admin</span></NavLink>
         <BestFilters />
         <ViewSelector />
         <LockToggle />
         <HeaderVoice />
         <NavLink
           to="/settings"
-          className={({ isActive }) => `${styles.iconLink} ${isActive ? styles.active : ''}`}
+          className={({ isActive }) => `${styles.iconLink} ${styles.desktopOnly} ${isActive ? styles.active : ''}`}
           aria-label="Settings"
           data-tour="settings"
         >
           <Settings size={18} />
         </NavLink>
+        <MoreMenu />
       </nav>
     </header>
+  );
+}
+
+function Brand() {
+  return (
+    <Link to="/" className={styles.brand} aria-label="Sportlight home">
+      <Logo height={24} className={styles.brandFull} />
+      <span className={styles.brandMark}>
+        <LogoMark size={26} />
+      </span>
+    </Link>
+  );
+}
+
+/** Use a popup menu that closes on outside press or Escape. */
+function usePopup() {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('pointerdown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+  return { open, setOpen, ref };
+}
+
+/** Phones: Admin and Settings fold into one overflow menu to keep the bar on one line. */
+function MoreMenu() {
+  const { open, setOpen, ref } = usePopup();
+  return (
+    <div className={`${styles.viewMenu} ${styles.phoneOnly}`} ref={ref}>
+      <button
+        type="button"
+        className={`${styles.iconButton} ${open ? styles.active : ''}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="More"
+        onClick={() => setOpen((o) => !o)}
+      >
+        <MoreHorizontal size={18} />
+      </button>
+      {open && (
+        <div className={styles.menu} role="menu" aria-label="More">
+          <Link to="/settings" role="menuitem" className={styles.menuItem} onClick={() => setOpen(false)}>
+            <Settings size={16} />
+            <span>Settings</span>
+          </Link>
+          <Link to="/admin" role="menuitem" className={styles.menuItem} onClick={() => setOpen(false)}>
+            <Grid2x2 size={16} />
+            <span>Admin</span>
+          </Link>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -83,30 +142,28 @@ const VIEWS: Array<{ id: ViewId; label: string; icon: ReactNode }> = [
   { id: '3d', label: '3D', icon: <Box size={16} /> },
 ];
 
+/** Phones get their own views, each sized to fit the screen without scrolling. */
+const PHONE_VIEWS: Array<{ id: PhoneLayoutId; label: string; icon: ReactNode }> = [
+  { id: 'stack', label: 'Stack', icon: <Rows4 size={16} /> },
+  { id: 'trio', label: 'Trio', icon: <Rows3 size={16} /> },
+  { id: 'phone-table', label: 'Details', icon: <PanelTop size={16} /> },
+];
+
 /** View dropdown for the live page; 3D is the spatial room. */
 function ViewSelector() {
   const onLive = useMatch({ path: '/live', end: true });
+  const phone = useIsPhone();
   const { prefs, updateLive } = usePreferences();
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: PointerEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
-    document.addEventListener('pointerdown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('pointerdown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
+  const { open, setOpen, ref } = usePopup();
 
   if (!onLive) return null;
-  const currentId: ViewId = prefs.live.beta3d ? '3d' : prefs.live.layout;
-  const current = VIEWS.find((v) => v.id === currentId) ?? VIEWS[0]!;
+  const views: Array<{ id: ViewId | PhoneLayoutId; label: string; icon: ReactNode }> = phone ? PHONE_VIEWS : VIEWS;
+  const currentId = phone ? activeLayout(prefs.live, true) : prefs.live.beta3d ? '3d' : prefs.live.layout;
+  const current = views.find((v) => v.id === currentId) ?? views[0]!;
+  const select = (id: ViewId | PhoneLayoutId) => {
+    if (phone) updateLive({ phoneLayout: id as PhoneLayoutId });
+    else updateLive(id === '3d' ? { beta3d: true } : { beta3d: false, layout: id as LayoutId });
+  };
   return (
     <div className={styles.viewMenu} ref={ref} data-tour="view">
       <button
@@ -123,7 +180,7 @@ function ViewSelector() {
       </button>
       {open && (
         <div className={styles.menu} role="menu" aria-label="View">
-          {VIEWS.map((v) => (
+          {views.map((v) => (
             <button
               key={v.id}
               type="button"
@@ -133,9 +190,7 @@ function ViewSelector() {
               onClick={() => {
                 setOpen(false);
                 if (v.id === currentId) return;
-                switchView(() =>
-                  updateLive(v.id === '3d' ? { beta3d: true } : { beta3d: false, layout: v.id }),
-                );
+                switchView(() => select(v.id));
               }}
             >
               {v.icon}
@@ -209,7 +264,10 @@ function LiveIndicator() {
   return (
     <NavLink to="/live" end className={({ isActive }) => `${styles.live} ${isActive ? styles.active : ''}`}>
       <span className={`${styles.dot} ${online ? styles.dotLive : styles.dotOff}`} aria-hidden />
-      <span>{online ? 'Live' : ready ? 'Reconnecting…' : 'Connecting…'}</span>
+      <span className={styles.liveLong}>{online ? 'Live' : ready ? 'Reconnecting…' : 'Connecting…'}</span>
+      <span className={styles.liveShort} aria-hidden>
+        {online ? 'Live' : 'Offline'}
+      </span>
       <span className={`${styles.clock} mono`} aria-hidden>
         {formatClock(now + clockOffsetMs)}
       </span>
@@ -227,15 +285,17 @@ function BestOfTodayLink() {
     return (
       <Link to="/live" className={styles.backLink}>
         <ArrowLeft size={16} aria-hidden />
-        <span>Back to live</span>
+        <span>
+          Back<span className={styles.collapsible}> to live</span>
+        </span>
       </Link>
     );
   }
   return (
     <Link to="/best" className={styles.navLink} aria-label="Best of today" data-tour="best">
       <Trophy size={16} aria-hidden />
-      <span>Best of today</span>
-      <ArrowRight size={16} aria-hidden />
+      <span className={styles.collapsible}>Best of today</span>
+      <ArrowRight size={16} aria-hidden className={styles.collapsible} />
     </Link>
   );
 }

@@ -151,7 +151,7 @@ Backend environment variables (defaults in brackets):
 | `HIGHLIGHT_ENTER_THRESHOLD` [78], `HIGHLIGHT_EXIT_THRESHOLD` [68], `HIGHLIGHT_PRE_ROLL_SEC` [6], `HIGHLIGHT_POST_ROLL_SEC` [3], `HIGHLIGHT_MIN_CLIP_SEC` [8], `HIGHLIGHT_MAX_CLIP_SEC` [24], `HIGHLIGHT_MERGE_GAP_SEC` [12], `HIGHLIGHT_DEDUPE_BY_MEDIA` [true], `HIGHLIGHT_MAX_PER_DAY` [250], `HIGHLIGHT_TIMEZONE` [`Europe/London`] | Highlight rules. |
 | `STALE_AFTER_MS` [5000], `SILENT_AFTER_MS` [15000], `EXPIRE_AFTER_MS` [120000], `ENDED_RETENTION_MS` [60000] | Feed health timings. |
 | `GEMINI_API_KEY` [unset], `GEMINI_MODEL` [`gemini-3.6-flash`], `MEDIA_FETCH_BASE` [`http://localhost:5173/media`], `MEDIA_PUBLIC_PREFIX` [`/media`] | Highlight captions. `MEDIA_FETCH_BASE` is where the backend can fetch media; `/media/...` video paths are rewritten onto it. |
-| `DATA_DIR` [`./data`], `PORT` [4000], `CORS_ORIGINS` [`*`], `ADMIN_TOKEN` [unset] | Storage, HTTP, and an optional bearer token for `/api/admin/*`. |
+| `DATA_DIR` [`./data`], `PORT` [4000], `CORS_ORIGINS` [`*`] | Storage and HTTP. `/api/admin/*` is open (PoC). |
 
 Stream metadata: each demo feed carries mock rights-holder metadata (`event.broadcaster`, for example Sky Sports · Sky Sports Football) and a venue. The live tiles, table and captions use it.
 

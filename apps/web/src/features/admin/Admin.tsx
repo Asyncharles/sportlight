@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import { ArrowBigDown, ArrowBigUp, KeyRound, Pause, Play, SlidersHorizontal } from 'lucide-react';
+import { ArrowBigDown, ArrowBigUp, Pause, Play, SlidersHorizontal } from 'lucide-react';
 import { getSport, type AdminFeed, type AdminOverview } from '@sportlight/shared';
 import { SportIcon } from '../../components/SportIcon';
 import { apiUrl } from '../../lib/env';
@@ -10,15 +10,12 @@ import { Sparkline } from './Sparkline';
 import styles from './Admin.module.scss';
 
 const POLL_MS = 1000;
-const TOKEN_KEY = 'sportlight.adminToken';
 const COLS = 9;
 
 /** Operations view of every stream, polled from the backend. Fits one screen; panels scroll internally. */
 export function Admin() {
   const [data, setData] = useState<AdminOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [needsToken, setNeedsToken] = useState(false);
-  const [token, setToken] = useState(() => sessionStorage.getItem(TOKEN_KEY) ?? '');
   const [paused, setPaused] = useState(false);
   const [showEnded, setShowEnded] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -26,18 +23,12 @@ export function Admin() {
   const visible = useDocumentVisible();
 
   useEffect(() => {
-    if (paused || !visible || needsToken) return;
+    if (paused || !visible) return;
     let cancelled = false;
     let timer: number;
     const poll = async () => {
       try {
-        const res = await fetch(apiUrl('/api/admin/overview'), {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        if (res.status === 401) {
-          setNeedsToken(true);
-          return;
-        }
+        const res = await fetch(apiUrl('/api/admin/overview'));
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const body = (await res.json()) as AdminOverview;
         if (!cancelled) {
@@ -54,7 +45,7 @@ export function Admin() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [paused, visible, token, needsToken]);
+  }, [paused, visible]);
 
   const feeds = useMemo(() => {
     const order = { live: 0, unavailable: 1, ended: 2 } as const;
@@ -62,28 +53,6 @@ export function Admin() {
       .filter((f) => showEnded || f.status !== 'ended')
       .sort((a, b) => order[a.status] - order[b.status] || (b.intensity?.score ?? 0) - (a.intensity?.score ?? 0));
   }, [data, showEnded]);
-
-  if (needsToken) {
-    return (
-      <main className={styles.page}>
-        <form
-          className={styles.tokenForm}
-          onSubmit={(e) => {
-            e.preventDefault();
-            sessionStorage.setItem(TOKEN_KEY, token);
-            setNeedsToken(false);
-          }}
-        >
-          <KeyRound size={20} />
-          <label htmlFor="admin-token">Admin token</label>
-          <input id="admin-token" type="password" value={token} onChange={(e) => setToken(e.target.value)} autoFocus />
-          <button className="sl-button small" type="submit">
-            Continue
-          </button>
-        </form>
-      </main>
-    );
-  }
 
   const counts = data
     ? {
@@ -327,13 +296,13 @@ export function Admin() {
       </div>
 
       <Dialog open={systemOpen} title="System" onClose={() => setSystemOpen(false)}>
-        <SystemTools token={token} config={data?.config} />
+        <SystemTools config={data?.config} />
       </Dialog>
     </main>
   );
 }
 
-function SystemTools({ token, config }: { token: string; config: unknown }) {
+function SystemTools({ config }: { config: unknown }) {
   const [message, setMessage] = useState('');
   const [clearing, setClearing] = useState(false);
 
@@ -348,10 +317,7 @@ function SystemTools({ token, config }: { token: string; config: unknown }) {
     try {
       const response = await fetch(apiUrl('/api/admin/storage/clear'), {
         method: 'POST',
-        headers: {
-          'X-Sportlight-Action': 'clear-archived-storage',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: { 'X-Sportlight-Action': 'clear-archived-storage' },
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const result = (await response.json()) as { files: number; bytes: number };

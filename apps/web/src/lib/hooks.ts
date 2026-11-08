@@ -1,3 +1,4 @@
+import { PHONE_QUERY } from './live-ui';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 
 export function useMediaQuery(query: string): boolean {
@@ -10,6 +11,11 @@ export function useMediaQuery(query: string): boolean {
     () => matchMedia(query).matches,
     () => false,
   );
+}
+
+/** True on phone-sized screens (see PHONE_QUERY), which get their own live layouts and header. */
+export function useIsPhone(): boolean {
+  return useMediaQuery(PHONE_QUERY);
 }
 
 /** True when the OS asks for reduced motion or the in-app override is on. */

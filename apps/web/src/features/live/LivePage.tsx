@@ -9,14 +9,14 @@ import {
   type ViewerTile,
   type VoteValue,
 } from '@sportlight/shared';
-import { useReducedMotion } from '../../lib/hooks';
+import { useIsPhone, useReducedMotion } from '../../lib/hooks';
 import { live, useLive } from '../../lib/live-client';
 import { effectiveSelectionConfig, setVoiceHandler, useLiveUi, viewerOptions, type VoiceHandler } from '../../lib/live-ui';
 import { usePreferences } from '../../lib/preferences';
 import { castVote, useVotes } from '../../lib/votes';
 import { LiveStage } from './LiveStage';
 import { resolveVoiceAlternatives, voiceExamples } from './voiceCommands';
-import { layoutDef } from '../../lib/live-ui';
+import { activeLayout, layoutDef, uses3d } from '../../lib/live-ui';
 import { LiveTour } from './LiveTour';
 import type { PlaybackStatus } from './useLivePlayback';
 import { useSelection } from './useSelection';
@@ -30,13 +30,15 @@ export function LivePage() {
   const { prefs } = usePreferences();
   const ui = useLiveUi();
   const reducedMotion = useReducedMotion();
+  const phone = useIsPhone();
+  const layout = activeLayout(prefs.live, phone);
   const feeds = useMemo(() => Object.values(feedMap), [feedMap]);
   const votes = useVotes(feeds);
   const selectionConfig = useMemo(
     () => effectiveSelectionConfig(config?.selection, prefs.live),
     [config?.selection, prefs.live],
   );
-  const options = useMemo(() => viewerOptions(prefs.live, ui.locked), [prefs.live, ui.locked]);
+  const options = useMemo(() => viewerOptions(prefs.live, ui.locked, phone), [prefs.live, ui.locked, phone]);
   const { assignment, pinned, promote, keep, pin, choose, hurry, upcoming, lastChanges } = useSelection(
     feeds,
     prefs.follows,
@@ -133,7 +135,7 @@ export function LivePage() {
       const { command, understood: text, corrected: changed } = resolveVoiceAlternatives(
         alternatives,
         voiceFeeds,
-        [assignment.main, ...layoutDef(prefs.live.layout).sideSlots.map((slot) => assignment[slot])],
+        [assignment.main, ...layoutDef(layout).sideSlots.map((slot) => assignment[slot])],
         assignment.main?.id,
       );
       const corrected = changed ? text : undefined;
@@ -156,7 +158,7 @@ export function LivePage() {
   );
 
   const empty = ready && eligibleCount === 0;
-  const Stage = prefs.live.beta3d ? SpatialStage : LiveStage;
+  const Stage = uses3d(prefs.live, phone) ? SpatialStage : LiveStage;
 
   return (
     <main className={styles.page} data-view-stage data-tour="stage">
@@ -187,7 +189,8 @@ export function LivePage() {
               follows={prefs.follows}
               selectionConfig={selectionConfig}
               upcoming={upcoming}
-              layout={prefs.live.layout}
+              layout={layout}
+              phone={phone}
               sidebar={prefs.live.sidebar}
               animation={prefs.live.animation}
               reducedMotion={reducedMotion}

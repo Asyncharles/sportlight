@@ -10,8 +10,8 @@ import {
 } from '@sportlight/shared';
 import { LogoMark } from '../../components/Logo';
 import { glowFor } from '../../lib/glow';
-import { layoutDef, moveMsFor, revealMsFor, screenNumber } from '../../lib/live-ui';
-import type { LayoutId, SidebarSide, SwitchAnimation } from '../../lib/preferences';
+import { layoutDef, moveMsFor, type AnyLayoutId, revealMsFor, screenNumber } from '../../lib/live-ui';
+import type { SidebarSide, SwitchAnimation } from '../../lib/preferences';
 import { FeedPicker } from './FeedPicker';
 import { FeedTable } from './FeedTable';
 import { FeedTile } from './FeedTile';
@@ -35,7 +35,9 @@ export interface LiveStageProps {
   follows: readonly Follow[];
   selectionConfig: SelectionConfig;
   upcoming: UpcomingSwitch[];
-  layout: LayoutId;
+  layout: AnyLayoutId;
+  /** Phone-sized screen: the stage fills the screen with no scrolling. */
+  phone?: boolean;
   sidebar: SidebarSide;
   animation: SwitchAnimation;
   reducedMotion: boolean;
@@ -178,6 +180,7 @@ export function LiveStage(props: LiveStageProps) {
       ref={stageRef}
       className={`${styles.stage} ${resizing ? styles.instant : ''}`}
       data-layout={layout}
+      data-phone={props.phone || undefined}
       data-side={def.sided ? sidebar : undefined}
       style={stageStyle}
     >

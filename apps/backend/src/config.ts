@@ -16,8 +16,6 @@ export interface BackendConfig {
   amqpPrefetch: number;
   dataDir: string;
   corsOrigins: string[];
-  /** When set, /api/admin/* requires `Authorization: Bearer <token>`. */
-  adminToken: string | null;
   staleAfterMs: number;
   /** A feed with no events at all for this long is marked unavailable… */
   silentAfterMs: number;
@@ -77,7 +75,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig 
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean),
-    adminToken: env.ADMIN_TOKEN || null,
     staleAfterMs: num('STALE_AFTER_MS', DEFAULT_STALE_AFTER_MS),
     silentAfterMs: num('SILENT_AFTER_MS', 15_000),
     expireAfterMs: num('EXPIRE_AFTER_MS', 120_000),

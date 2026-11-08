@@ -182,9 +182,7 @@ export async function createApp(config: BackendConfig, log: Logger) {
     if (await content.route(req, res, url)) return;
     applyCors(req, res, config.corsOrigins);
     if (url.pathname === '/api/admin/storage/clear' && req.method === 'POST') {
-      if (config.adminToken && req.headers.authorization !== `Bearer ${config.adminToken}`)
-        return sendJson(res, 401, { error: 'unauthorized' });
-      // Custom header prevents cross-site form submissions, including tokenless PoC mode.
+      // Custom header prevents cross-site form submissions (the admin API is open in this PoC).
       if (req.headers['x-sportlight-action'] !== 'clear-archived-storage')
         return sendJson(res, 403, { error: 'invalid_action' });
       const cutoff = Date.now() - 7 * 86_400_000;
@@ -242,9 +240,6 @@ export async function createApp(config: BackendConfig, log: Logger) {
     }
 
     if (path === '/api/admin/overview') {
-      if (config.adminToken && req.headers.authorization !== `Bearer ${config.adminToken}`) {
-        return sendJson(res, 401, { error: 'unauthorized' });
-      }
       return sendJson(res, 200, adminOverview());
     }
     return sendJson(res, 404, { error: 'not_found' });

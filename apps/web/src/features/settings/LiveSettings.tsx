@@ -29,6 +29,13 @@ export function LiveSettings() {
   const live = prefs.live;
   const { config, feeds } = useLive();
   const effective = effectiveSelectionConfig(config?.selection, live);
+  /** The switching rules in use, in the units the sliders show. */
+  const current = {
+    minDisplaySec: Math.round(effective.minDisplayMs / 1000),
+    margin: effective.replaceMargin,
+    challengeSec: Math.round(effective.challengeMs / 1000),
+  };
+  const setRule = (patch: Partial<typeof live.custom>) => updateLive({ pace: 'custom', custom: { ...current, ...patch } });
   const posters = useMemo(
     () =>
       Object.values(feeds)
@@ -122,37 +129,36 @@ export function LiveSettings() {
             options={[...PACES.map((p) => ({ value: p.id, label: p.name })), { value: 'custom' as const, label: 'Custom' }]}
           />
         </Row>
-        {live.pace === 'custom' && (
-          <div className={styles.sliders}>
-            <Slider
-              label="Minimum time on screen"
-              unit="s"
-              min={5}
-              max={90}
-              step={5}
-              value={live.custom.minDisplaySec}
-              onChange={(minDisplaySec) => updateLive({ custom: { ...live.custom, minDisplaySec } })}
-            />
-            <Slider
-              label="Must beat by"
-              unit=" pts"
-              min={2}
-              max={30}
-              step={1}
-              value={live.custom.margin}
-              onChange={(margin) => updateLive({ custom: { ...live.custom, margin } })}
-            />
-            <Slider
-              label="For at least"
-              unit="s"
-              min={1}
-              max={15}
-              step={1}
-              value={live.custom.challengeSec}
-              onChange={(challengeSec) => updateLive({ custom: { ...live.custom, challengeSec } })}
-            />
-          </div>
-        )}
+        {/* Always shows the rules in use; adjusting one switches to Custom, starting from the current pace. */}
+        <div className={styles.sliders}>
+          <Slider
+            label="Minimum time on screen"
+            unit="s"
+            min={5}
+            max={120}
+            step={1}
+            value={current.minDisplaySec}
+            onChange={(minDisplaySec) => setRule({ minDisplaySec })}
+          />
+          <Slider
+            label="Must beat by"
+            unit=" pts"
+            min={1}
+            max={40}
+            step={1}
+            value={current.margin}
+            onChange={(margin) => setRule({ margin })}
+          />
+          <Slider
+            label="For at least"
+            unit="s"
+            min={1}
+            max={20}
+            step={1}
+            value={current.challengeSec}
+            onChange={(challengeSec) => setRule({ challengeSec })}
+          />
+        </div>
         <Row label="Warning" hint="Show “Switching to …” with a countdown, so you can keep the current feed.">
           <Segmented<string>
             label="Switch warning"
@@ -191,8 +197,8 @@ export function LiveSettings() {
 }
 
 function paceHint(pace: string, c: { minDisplayMs: number; replaceMargin: number; challengeMs: number }): string {
-  const rule = `A feed stays at least ${Math.round(c.minDisplayMs / 1000)} s; a challenger must lead by ${c.replaceMargin} points for ${(c.challengeMs / 1000).toFixed(c.challengeMs % 1000 ? 1 : 0)} s.`;
-  return pace === 'custom' ? rule : `${PACES.find((p) => p.id === pace)?.hint ?? ''}. ${rule}`;
+  const rule = `A feed stays at least ${Math.round(c.minDisplayMs / 1000)} s; a challenger must lead by ${c.replaceMargin} points for ${(c.challengeMs / 1000).toFixed(c.challengeMs % 1000 ? 1 : 0)} s. Applies to the side windows, and to the main window when it follows the action.`;
+  return pace === 'custom' ? `Your own rules. ${rule}` : `${PACES.find((p) => p.id === pace)?.hint ?? ''}. ${rule}`;
 }
 
 function Slider({

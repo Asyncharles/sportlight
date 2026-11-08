@@ -9,6 +9,8 @@
   isolation: isolate;
   -webkit-tap-highlight-color: transparent;
   outline: none;
+  // Lets tiny windows (phone thumbnails) drop their chrome; see the container queries at the end.
+  container-type: size;
 
   &:focus-visible {
     box-shadow:
@@ -442,5 +444,61 @@
   from {
     opacity: 0;
     transform: translateY(4px);
+  }
+}
+
+// ---------------------------------------------------------------- small windows (phone thumbnails)
+// Too small for controls or titles: keep just the screen number and intensity, a tap promotes it.
+
+@container (max-width: 240px) {
+  .side {
+    .title,
+    .controls,
+    .goLive,
+    .chipCaret {
+      display: none;
+    }
+    .chip,
+    .badge {
+      top: 5px;
+      height: 20px;
+      font-size: 11px;
+    }
+    .chip {
+      left: 5px;
+      min-width: 20px;
+      padding: 0 5px;
+      border-radius: 6px;
+    }
+    .badge {
+      right: 5px;
+      gap: 3px;
+      padding: 0 6px;
+      svg {
+        display: none;
+      }
+    }
+    .statusChip {
+      top: auto;
+      bottom: 5px;
+      padding: 2px 7px;
+      font-size: 10.5px;
+    }
+  }
+}
+
+// Short main windows (landscape phones): tighter controls so the video stays visible.
+@container (max-height: 230px) {
+  .main {
+    .ctl {
+      width: 34px;
+      height: 34px;
+    }
+    .controls {
+      padding: 22px 6px 6px;
+    }
+    .subtitle {
+      display: none;
+    }
   }
 }

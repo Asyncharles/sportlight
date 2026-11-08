@@ -52,7 +52,7 @@ The web nginx configuration routes `/api/` and `/ws` to `backend:4000`, `/media/
 
 Set `CONTENT_APP_URL` to the exact public HTTPS origin. For Google publishing, register `https://sportlight.example.com/api/content/auth/callback` as an authorized OAuth redirect URI. Supply `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, a stable 64-hex-character `CONTENT_ENCRYPTION_KEY`, and `CONTENT_ALLOWED_EMAILS`. Keep the encryption key backed up with `/data`. Captioning additionally uses `GEMINI_API_KEY`. Public publishing is enabled by the content settings when an authorized channel is connected.
 
-The existing Compose ports and optional admin token are PoC defaults. If placing behind a public proxy, restrict direct backend/broker access at the host/network boundary. Set `ADMIN_TOKEN` if admin protection is desired; the dashboard accepts that bearer token.
+The existing Compose ports and the open admin dashboard are PoC defaults. If placing behind a public proxy, restrict direct backend/broker access at the host/network boundary.
 
 ## Storage and recovery
 

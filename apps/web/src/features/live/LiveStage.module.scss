@@ -219,25 +219,25 @@
   transition: none;
 }
 
-// ---------------------------------------------------------------- tablet / phone
+// ---------------------------------------------------------------- tablet
 // Main window on top; the side windows (or two side windows and the table) in a row beneath.
 
 @media (max-width: 820px) {
-  .stage[data-layout] {
+  .stage:not([data-phone])[data-layout] {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     grid-template-rows: minmax(0, 1fr) auto;
     grid-template-areas:
       'main main main'
       's1 s2 s3';
   }
-  .stage[data-layout='quad'] {
+  .stage:not([data-phone])[data-layout='quad'] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-rows: repeat(2, minmax(0, 1fr));
     grid-template-areas:
       'main s1'
       's2 s3';
   }
-  .stage[data-layout='table'] {
+  .stage:not([data-phone])[data-layout='table'] {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto auto auto minmax(260px, 1fr);
     grid-template-areas: 'main' 's1' 's2' 'tbl';
@@ -246,7 +246,7 @@
       aspect-ratio: auto;
     }
   }
-  .stage:not([data-layout='quad']) .slot:not([data-slot='main']) {
+  .stage:not([data-phone]):not([data-layout='quad']) .slot:not([data-slot='main']) {
     aspect-ratio: 16 / 10;
     max-height: none;
   }
@@ -256,43 +256,69 @@
 }
 
 @media (max-width: 820px) and (orientation: portrait) {
-  .stage[data-layout] {
+  .stage:not([data-phone])[data-layout] {
     grid-template-rows: auto auto;
     align-content: start;
   }
-  .stage[data-layout='quad'] {
-    grid-template-rows: auto auto;
-  }
-  .slot[data-slot='main'],
-  .stage[data-layout='quad'] .slot {
+  .stage:not([data-phone]) .slot[data-slot='main'],
+  .stage:not([data-phone])[data-layout='quad'] .slot {
     aspect-ratio: 16 / 9;
   }
 }
 
-// Portrait phones: one scrolling column, main first. Every window gets a usable size.
-@media (max-width: 600px) and (orientation: portrait) {
-  .stage[data-layout],
-  .stage[data-layout='quad'] {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: none;
-    grid-auto-rows: auto;
+// ---------------------------------------------------------------- phone
+// Phone layouts always fill the stage exactly (no scrolling): rows share the height that's there.
+
+.stage[data-phone] {
+  gap: 8px;
+
+  .slot[data-slot='table'] {
+    grid-area: tbl;
+  }
+  .placeholder {
+    gap: 6px;
+    font-size: 12px;
+  }
+}
+
+// Portrait: full-width rows, so 16:9 video keeps a wide frame.
+.stage[data-phone][data-layout='stack'] {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+  grid-template-areas: 'main' 's1' 's2' 's3';
+}
+
+.stage[data-phone][data-layout='trio'] {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1.25fr) repeat(2, minmax(0, 1fr));
+  grid-template-areas: 'main' 's1' 's2';
+}
+
+.stage[data-phone][data-layout='phone-table'] {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 0.8fr) minmax(0, 1fr);
+  grid-template-areas: 'main' 'tbl';
+}
+
+// Landscape: windows sit side by side instead.
+@media (orientation: landscape) {
+  .stage[data-phone][data-layout='stack'] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
     grid-template-areas:
-      'main'
-      's1'
-      's2'
-      's3';
+      'main s1'
+      's2 s3';
   }
-  .stage:not([data-layout='quad']) .slot:not([data-slot='main']) {
-    aspect-ratio: 16 / 9;
+  .stage[data-phone][data-layout='trio'] {
+    grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      'main s1'
+      'main s2';
   }
-  .stage:not([data-layout='quad']) .slot[data-slot='table'] {
-    aspect-ratio: auto;
-    height: 300px;
-  }
-  .stage[data-layout='table'] {
-    grid-template-areas: 'main' 's1' 's2' 'tbl';
-  }
-  .placeholder span:not(.screenNum) {
-    display: inline;
+  .stage[data-phone][data-layout='phone-table'] {
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: 'main tbl';
   }
 }

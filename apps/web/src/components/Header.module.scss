@@ -359,3 +359,105 @@
   }
 }
 
+
+// ---------------------------------------------------------------- phone
+// One compact row: logo mark, live status, best of today, then icon-only controls and a menu.
+
+.brandMark,
+.liveShort,
+.phoneOnly {
+  display: none;
+}
+
+.iconButton {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease);
+
+  &:hover {
+    background: var(--surface-2);
+  }
+}
+
+a.menuItem {
+  text-decoration: none;
+}
+
+@media (max-width: 640px), (max-height: 500px) and (max-width: 960px) {
+  .header {
+    gap: 6px;
+    height: var(--header-h);
+    padding: 0 10px;
+    padding-top: env(safe-area-inset-top);
+  }
+  .left {
+    gap: 4px;
+  }
+  .right {
+    gap: 2px;
+  }
+  .brandFull,
+  .desktopOnly,
+  .liveLong,
+  .clock,
+  .viewLabel,
+  .lockLabel,
+  .collapsible {
+    display: none;
+  }
+  .brandMark,
+  .liveShort {
+    display: inline-flex;
+  }
+  .phoneOnly {
+    display: block;
+  }
+  .brand {
+    padding: 4px;
+  }
+  .live {
+    height: 34px;
+    padding: 0 10px;
+    gap: 7px;
+    font-size: 13px;
+  }
+  .navLink {
+    height: 36px;
+    padding: 0 9px;
+    &::after {
+      left: 9px;
+      right: 9px;
+    }
+  }
+  .viewMenu {
+    margin-right: 0;
+  }
+  .viewButton {
+    gap: 4px;
+    height: 34px;
+    padding: 0 7px 0 9px;
+  }
+  .lock {
+    width: 36px;
+    padding: 0;
+    justify-content: center;
+  }
+  .filterButton {
+    height: 34px;
+    padding: 0 12px 0 10px;
+  }
+  .backLink {
+    height: 34px;
+    padding: 0 12px 0 8px;
+  }
+  .menu {
+    min-width: 168px;
+  }
+}

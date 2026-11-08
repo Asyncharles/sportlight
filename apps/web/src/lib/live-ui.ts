@@ -5,7 +5,7 @@ import {
   type SlotId,
   type ViewerSelectionOptions,
 } from '@sportlight/shared';
-import type { LayoutId, LivePreferences, SwitchAnimation, SwitchPace } from './preferences';
+import type { LayoutId, LivePreferences, PhoneLayoutId, SwitchAnimation, SwitchPace } from './preferences';
 import { Store, useStore } from './store';
 
 /**
@@ -62,8 +62,10 @@ export function voiceCommandExamples(): string[] {
 
 // ---------------------------------------------------------------- layouts
 
-export interface LayoutDef {
-  id: LayoutId;
+export type AnyLayoutId = LayoutId | PhoneLayoutId;
+
+export interface LayoutDef<Id extends AnyLayoutId = AnyLayoutId> {
+  id: Id;
   name: string;
   description: string;
   /** Side windows this layout shows. */
@@ -74,7 +76,7 @@ export interface LayoutDef {
   sided: boolean;
 }
 
-export const LAYOUTS: readonly LayoutDef[] = [
+export const LAYOUTS: readonly LayoutDef<LayoutId>[] = [
   {
     id: 'theatre',
     name: 'Theatre',
@@ -109,8 +111,50 @@ export const LAYOUTS: readonly LayoutDef[] = [
   },
 ];
 
-export function layoutDef(id: LayoutId): LayoutDef {
-  return LAYOUTS.find((l) => l.id === id) ?? LAYOUTS[0]!;
+/** Phone layouts: sized so every window fits on screen, in portrait and landscape. */
+export const PHONE_LAYOUTS: readonly LayoutDef<PhoneLayoutId>[] = [
+  {
+    id: 'stack',
+    name: 'Stack',
+    description: 'All four windows, one above the other.',
+    sideSlots: ['side-1', 'side-2', 'side-3'],
+    table: false,
+    sided: false,
+  },
+  {
+    id: 'trio',
+    name: 'Trio',
+    description: 'A bigger main window with two windows beneath.',
+    sideSlots: ['side-1', 'side-2'],
+    table: false,
+    sided: false,
+  },
+  {
+    id: 'phone-table',
+    name: 'Details',
+    description: 'Main window with every live feed listed beneath.',
+    sideSlots: [],
+    table: true,
+    sided: false,
+  },
+];
+
+export function layoutDef(id: AnyLayoutId): LayoutDef {
+  return LAYOUTS.find((l) => l.id === id) ?? PHONE_LAYOUTS.find((l) => l.id === id) ?? LAYOUTS[0]!;
+}
+
+/** Phones (portrait, or landscape with little height) get their own set of layouts. */
+export const PHONE_QUERY = '(max-width: 640px), (max-height: 500px) and (max-width: 960px)';
+
+/** The layout the live page shows: the phone layout on phones, otherwise the desktop one. */
+export function activeLayout(live: LivePreferences, phone: boolean): AnyLayoutId {
+  if (!phone) return live.layout;
+  return PHONE_LAYOUTS.some((l) => l.id === live.phoneLayout) ? live.phoneLayout : PHONE_LAYOUTS[0]!.id;
+}
+
+/** 3D is a desktop view; phones always use a 2D layout. */
+export function uses3d(live: LivePreferences, phone: boolean): boolean {
+  return live.beta3d && !phone;
 }
 
 /** Screen numbers (1 = main), used on the tiles and for the 1–4 keybinds. */
@@ -156,9 +200,9 @@ export function effectiveSelectionConfig(server: SelectionConfig | null | undefi
   }
 }
 
-export function viewerOptions(live: LivePreferences, locked: boolean): ViewerSelectionOptions {
+export function viewerOptions(live: LivePreferences, locked: boolean, phone = false): ViewerSelectionOptions {
   return {
-    sideSlots: live.beta3d ? ['side-1', 'side-2', 'side-3'] : layoutDef(live.layout).sideSlots,
+    sideSlots: uses3d(live, phone) ? ['side-1', 'side-2', 'side-3'] : layoutDef(activeLayout(live, phone)).sideSlots,
     locked,
     countdownMs: live.countdownSec * 1000,
     mainPolicy: live.mainPolicy,
