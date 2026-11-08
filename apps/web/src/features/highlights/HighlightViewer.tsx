@@ -3,7 +3,9 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Sparkles, X } from 'lucide-react';
 import { DEFAULT_HIGHLIGHT_CONFIG, getCompetition, getSport, matchesFollows, type Highlight } from '@sportlight/shared';
 import { SportIcon } from '../../components/SportIcon';
-import { apiUrl, mediaUrl } from '../../lib/env';
+import { apiUrl } from '../../lib/env';
+import { useHighlightStill } from '../../lib/frame-grab';
+import { useNearViewport } from '../../lib/hooks';
 import { formatDuration, formatTimeOfDay } from '../../lib/format';
 import { highlightTitle, isModelCaption, showsEventSeparately, useHighlights } from '../../lib/highlights';
 import { useLive } from '../../lib/live-client';
@@ -154,7 +156,7 @@ export function HighlightViewer() {
                 aria-current={h.id === id ? 'true' : undefined}
               >
                 <span className={styles.itemThumb}>
-                  {h.thumbnailUrl && <img src={mediaUrl(h.thumbnailUrl)} alt="" loading="lazy" />}
+                  <RailThumb highlight={h} />
                   <span className={`${styles.itemDur} mono`}>{formatDuration(h.clip.durationSec)}</span>
                 </span>
                 <span className={styles.itemMeta}>
@@ -172,5 +174,26 @@ export function HighlightViewer() {
         </ol>
       </aside>
     </main>
+  );
+}
+
+/** Rail still: thumbnail or grabbed frame, with a skeleton until it decodes. */
+function RailThumb({ highlight: h }: { highlight: Highlight }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const still = useHighlightStill(h, useNearViewport(ref));
+  return (
+    <span ref={ref} className={`${styles.itemStill} ${still.ready || still.failed ? '' : 'sl-skeleton'}`}>
+      {still.src && (
+        <img
+          key={still.src}
+          className={still.ready ? styles.itemStillShown : undefined}
+          src={still.src}
+          alt=""
+          loading="lazy"
+          onLoad={still.onLoad}
+          onError={still.onError}
+        />
+      )}
+    </span>
   );
 }

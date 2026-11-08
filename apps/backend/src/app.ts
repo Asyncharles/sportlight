@@ -1,3 +1,4 @@
+import { createReadStream } from 'node:fs';
 import { readdir, stat, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
@@ -19,6 +20,7 @@ import { IntensityHistory } from './feeds/history.js';
 import { MomentDetector, type Moment } from './highlights/detector.js';
 import { GeminiCaptioner, HighlightCaptioner, type CaptionModel } from './highlights/captioner.js';
 import { LocalCaptioner } from './highlights/local-captioner.js';
+import { HighlightStills } from './highlights/stills.js';
 import { HighlightStore } from './highlights/store.js';
 import type { Logger } from './logger.js';
 import { ViewerRegistry } from './viewers.js';
@@ -53,6 +55,15 @@ export async function createApp(config: BackendConfig, log: Logger) {
     log.child('highlights'),
     true,
     (h, previous) => captioner.instant(h, previous),
+  );
+  const stills = new HighlightStills(
+    config.dataDir,
+    {
+      mediaFetchBase: config.captions.mediaFetchBase,
+      mediaPublicPrefix: config.captions.mediaPublicPrefix,
+      ffmpegPath: config.content.ffmpegPath,
+    },
+    log.child('stills'),
   );
   const viewers = new ViewerRegistry();
   await history.init();
@@ -185,21 +196,24 @@ export async function createApp(config: BackendConfig, log: Logger) {
       // Custom header prevents cross-site form submissions (the admin API is open in this PoC).
       if (req.headers['x-sportlight-action'] !== 'clear-archived-storage')
         return sendJson(res, 403, { error: 'invalid_action' });
-      const cutoff = Date.now() - 7 * 86_400_000;
-      let files = 0, bytes = 0;
-      for (const folder of ['history', 'highlights']) {
-        const dir = join(config.dataDir, folder);
-        for (const name of await readdir(dir)) {
-          if (!/^\d{4}-\d{2}-\d{2}\.(json|ndjson)$/.test(name)) continue;
-          if (Date.parse(name.slice(0, 10) + 'T23:59:59Z') >= cutoff) continue;
-          const file = join(dir, name);
-          const info = await stat(file);
-          if (info.mtimeMs >= cutoff) continue;
-          await unlink(file);
-          files++; bytes += info.size;
+      const target = url.searchParams.get('target') ?? 'archives';
+      if (target === 'highlights') {
+        // Every day's "Best of today", including today's: drop them from viewers' lists too.
+        const cleared = await highlights.clear();
+        for (const id of cleared.removed) {
+          captioner.forget(id);
+          hub.broadcast({ type: 'highlight.removed', id });
         }
+        return sendJson(res, 200, { files: cleared.files, bytes: cleared.bytes, items: cleared.removed.length });
       }
-      return sendJson(res, 200, { files, bytes });
+      if (target === 'history') return sendJson(res, 200, await clearFiles(['history'], /^\d{4}-\d{2}-\d{2}\.ndjson$/));
+      if (target === 'archives')
+        return sendJson(
+          res,
+          200,
+          await clearFiles(['history', 'highlights'], /^\d{4}-\d{2}-\d{2}\.(json|ndjson)$/, Date.now() - 7 * 86_400_000),
+        );
+      return sendJson(res, 400, { error: 'invalid_target' });
     }
     if (req.method === 'OPTIONS') return void res.writeHead(204).end();
     if (req.method !== 'GET') return sendJson(res, 405, { error: 'method_not_allowed' });
@@ -233,6 +247,20 @@ export async function createApp(config: BackendConfig, log: Logger) {
       if (sports?.length) list = list.filter((h) => sports.includes(h.sportId));
       return sendJson(res, 200, { day, timezone: config.highlights.timezone, highlights: list });
     }
+    const still = path.match(/^\/api\/highlights\/([a-f0-9]{6,40})\/still\.jpg$/);
+    if (still) {
+      const h = highlights.get(still[1]!);
+      const file = h ? await stills.file(h) : null;
+      if (!file) return sendJson(res, 404, { error: 'not_found' });
+      // The URL carries the peak second (?t=), so one URL always means the same image.
+      res.writeHead(200, {
+        'Content-Type': 'image/jpeg',
+        'Content-Length': (await stat(file)).size,
+        'Cache-Control': 'public, max-age=31536000, immutable',
+      });
+      createReadStream(file).pipe(res);
+      return;
+    }
     const hl = path.match(/^\/api\/highlights\/([a-f0-9]{6,40})$/);
     if (hl) {
       const h = highlights.get(hl[1]!);
@@ -243,6 +271,32 @@ export async function createApp(config: BackendConfig, log: Logger) {
       return sendJson(res, 200, adminOverview());
     }
     return sendJson(res, 404, { error: 'not_found' });
+  }
+
+  /** Deletes daily data files in the given folders; with `before`, only days (and files) older than it. */
+  async function clearFiles(folders: string[], pattern: RegExp, before?: number) {
+    let files = 0;
+    let bytes = 0;
+    for (const folder of folders) {
+      const dir = join(config.dataDir, folder);
+      let names: string[];
+      try {
+        names = await readdir(dir);
+      } catch {
+        continue;
+      }
+      for (const name of names) {
+        if (!pattern.test(name)) continue;
+        if (before !== undefined && Date.parse(name.slice(0, 10) + 'T23:59:59Z') >= before) continue;
+        const file = join(dir, name);
+        const info = await stat(file);
+        if (before !== undefined && info.mtimeMs >= before) continue;
+        await unlink(file);
+        files++;
+        bytes += info.size;
+      }
+    }
+    return { files, bytes };
   }
 
   function adminOverview(): AdminOverview {

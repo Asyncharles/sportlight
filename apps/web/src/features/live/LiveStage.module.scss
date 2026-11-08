@@ -282,10 +282,10 @@
 }
 
 // Portrait: full-width rows, so 16:9 video keeps a wide frame.
-.stage[data-phone][data-layout='stack'] {
+.stage[data-phone][data-layout='duo'] {
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: repeat(4, minmax(0, 1fr));
-  grid-template-areas: 'main' 's1' 's2' 's3';
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  grid-template-areas: 'main' 's1';
 }
 
 .stage[data-phone][data-layout='trio'] {
@@ -296,18 +296,16 @@
 
 .stage[data-phone][data-layout='phone-table'] {
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: minmax(0, 0.8fr) minmax(0, 1fr);
-  grid-template-areas: 'main' 'tbl';
+  grid-template-rows: repeat(2, minmax(0, 0.8fr)) minmax(0, 1fr);
+  grid-template-areas: 'main' 's1' 'tbl';
 }
 
 // Landscape: windows sit side by side instead.
 @media (orientation: landscape) {
-  .stage[data-phone][data-layout='stack'] {
+  .stage[data-phone][data-layout='duo'] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-template-rows: repeat(2, minmax(0, 1fr));
-    grid-template-areas:
-      'main s1'
-      's2 s3';
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: 'main s1';
   }
   .stage[data-phone][data-layout='trio'] {
     grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
@@ -318,7 +316,9 @@
   }
   .stage[data-phone][data-layout='phone-table'] {
     grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr);
-    grid-template-areas: 'main tbl';
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      'main tbl'
+      's1 tbl';
   }
 }

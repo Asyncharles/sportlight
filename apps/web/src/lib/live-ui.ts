@@ -114,10 +114,18 @@ export const LAYOUTS: readonly LayoutDef<LayoutId>[] = [
 /** Phone layouts: sized so every window fits on screen, in portrait and landscape. */
 export const PHONE_LAYOUTS: readonly LayoutDef<PhoneLayoutId>[] = [
   {
-    id: 'stack',
-    name: 'Stack',
-    description: 'All four windows, one above the other.',
-    sideSlots: ['side-1', 'side-2', 'side-3'],
+    id: 'phone-table',
+    name: 'Details',
+    description: 'Two windows with the live feed details beneath.',
+    sideSlots: ['side-1'],
+    table: true,
+    sided: false,
+  },
+  {
+    id: 'duo',
+    name: 'Duo',
+    description: 'Two windows, one above the other.',
+    sideSlots: ['side-1'],
     table: false,
     sided: false,
   },
@@ -127,14 +135,6 @@ export const PHONE_LAYOUTS: readonly LayoutDef<PhoneLayoutId>[] = [
     description: 'A bigger main window with two windows beneath.',
     sideSlots: ['side-1', 'side-2'],
     table: false,
-    sided: false,
-  },
-  {
-    id: 'phone-table',
-    name: 'Details',
-    description: 'Main window with every live feed listed beneath.',
-    sideSlots: [],
-    table: true,
     sided: false,
   },
 ];

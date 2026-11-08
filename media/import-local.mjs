@@ -3,6 +3,10 @@
 // the tuning clips as "extra" feeds that viewers can turn on in Settings.
 // The MP4s are not copied or re-encoded: the media server serves them straight from the footage
 // folder, so the browser plays the exact bytes the engine's pushers loop and t_video lines up.
+// For the live screen each clip also gets an HLS copy (local/hls/<id>/master.m3u8): the original
+// video cut into ~5 s segments without re-encoding (same timeline), plus a 360p rendition that small
+// tiles play. Browsers then start from a few KB of playlist instead of a multi-MB MP4 index.
+// Pass --no-hls to skip it (the 360p encode takes a few minutes per hour of footage).
 // Usage: npm run media:local -- --from=<samples dir> [--only=feed-id] [--force]
 //        <samples dir> mirrors the bucket's samples/: demo clips at the top, tuning clips in tuning/<sport>/.
 //        (or set LOCAL_FOOTAGE_DIR instead of --from)
@@ -19,6 +23,7 @@ const arg = (name) => args.find((a) => a.startsWith(`--${name}=`))?.slice(name.l
 const from = arg('from') ?? process.env.LOCAL_FOOTAGE_DIR;
 const only = arg('only');
 const force = args.includes('--force');
+const withHls = !args.includes('--no-hls');
 const log = (...a) => console.log('[local]', ...a);
 
 function run(cmd, cmdArgs) {
@@ -65,6 +70,58 @@ async function probe(file) {
   };
 }
 
+export const HLS_VERSION = 1;
+
+/**
+ * ffmpeg arguments for a clip's HLS ladder: rendition 0 is the source video and audio copied into
+ * fMP4 segments (so its timeline is the MP4's, exactly); rendition 1 is a 360p encode with keyframes
+ * where the source has them, so both cut at the same instants and players can switch cleanly.
+ */
+export function hlsArgs(input, outDir, hasAudio) {
+  const audio = () => (hasAudio ? ['-map', '0:a:0'] : []);
+  const pair = (i) => (hasAudio ? `v:${i},a:${i}` : `v:${i}`);
+  return [
+    '-i', input,
+    '-map', '0:v:0', ...audio(),
+    '-map', '0:v:0', ...audio(),
+    '-c:v:0', 'copy',
+    '-c:v:1', 'libx264', '-preset', 'veryfast', '-profile:v:1', 'main', '-crf', '26',
+    '-maxrate:v:1', '700k', '-bufsize:v:1', '1400k', '-filter:v:1', 'scale=-2:360', '-pix_fmt:v:1', 'yuv420p',
+    '-force_key_frames:v:1', 'source', '-sc_threshold:v:1', '0',
+    ...(hasAudio ? ['-c:a', 'copy'] : []),
+    '-f', 'hls',
+    '-hls_time', '4',
+    '-hls_playlist_type', 'vod',
+    '-hls_segment_type', 'fmp4',
+    '-hls_flags', 'independent_segments',
+    '-hls_fmp4_init_filename', 'init.mp4',
+    '-hls_segment_filename', join(outDir, '%v', 'seg_%05d.m4s'),
+    '-master_pl_name', 'master.m3u8',
+    '-var_stream_map', `${pair(0)},name:src ${pair(1)},name:360`,
+    join(outDir, '%v', 'index.m3u8'),
+  ];
+}
+
+/** Builds (or keeps) the clip's HLS copy; returns the catalog fields for it. */
+async function ensureHls(clip, file, previous) {
+  const { size, mtimeMs } = await stat(file);
+  const hlsKey = JSON.stringify({ size, mtimeMs: Math.round(mtimeMs), version: HLS_VERSION });
+  const rel = `local/hls/${clip.id}`;
+  const outDir = join(ROOT, 'dist', rel);
+  if (!force && previous?.hlsKey === hlsKey && existsSync(join(outDir, 'master.m3u8'))) {
+    return { hls: previous.hls, hlsKey };
+  }
+  const info = await probe(file);
+  log(`${clip.id}: making HLS (source copy + 360p)`);
+  const temp = `${outDir}.tmp`;
+  await rm(temp, { recursive: true, force: true });
+  await mkdir(temp, { recursive: true });
+  await ffmpeg(hlsArgs(file, temp, Boolean(info.audio)));
+  await rm(outDir, { recursive: true, force: true });
+  await rename(temp, outDir);
+  return { hls: `${rel}/master.m3u8`, hlsKey };
+}
+
 export const DATASETS = { demo: 'local-engine-v1', extra: 'local-extra-v1' };
 
 async function build(clip, footageDir, intervalSec, previous) {
@@ -75,7 +132,7 @@ async function build(clip, footageDir, intervalSec, previous) {
   const poster = `local/posters/${clip.id}.jpg`;
   if (!force && previous?.importKey === key && existsSync(join(ROOT, 'dist', poster))) {
     log(`${clip.id}: up to date`);
-    return previous;
+    return withHls ? { ...previous, ...(await ensureHls(clip, file, previous)) } : previous;
   }
   const info = await probe(file);
   if (info.video?.codec_name !== 'h264') throw new Error(`${clip.file}: video must be H.264 for browsers`);
@@ -94,7 +151,9 @@ async function build(clip, footageDir, intervalSec, previous) {
   await mkdir(thumbDir, { recursive: true });
   await ffmpeg(['-skip_frame', 'nokey', '-i', file, '-vf', `fps=1/${intervalSec}:round=down,scale=480:-2`,
     '-q:v', '5', '-start_number', '0', join(thumbDir, '%d.jpg')]);
+  const hls = withHls ? await ensureHls(clip, file, previous) : {};
   return {
+    ...hls,
     id: clip.id,
     sportId: clip.sportId,
     competitionId: clip.competitionId,

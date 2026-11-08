@@ -1,5 +1,6 @@
 import { PHONE_QUERY } from './live-ui';
 import { useEffect, useState, useSyncExternalStore } from 'react';
+import type { RefObject } from 'react';
 
 export function useMediaQuery(query: string): boolean {
   return useSyncExternalStore(
@@ -66,4 +67,23 @@ export function useResolvedTheme(): 'light' | 'dark' {
     return () => obs.disconnect();
   }, []);
   return theme;
+}
+
+/** True once the element is within a screen of the viewport (and stays true). */
+export function useNearViewport(ref: RefObject<Element>) {
+  const [near, setNear] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || near) return;
+    if (typeof IntersectionObserver === 'undefined') return setNear(true);
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) setNear(true);
+      },
+      { rootMargin: '100% 0px' },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [ref, near]);
+  return near;
 }

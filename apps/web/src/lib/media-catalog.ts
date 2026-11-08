@@ -18,6 +18,8 @@ interface CatalogClip {
   height?: number;
   startOffsetSec?: number;
   thumbnails?: { template: string; intervalSec: number; count: number };
+  /** HLS copy of `video` (same timeline), from `npm run media:local`. */
+  hls?: string;
 }
 
 export interface CatalogMedia {
@@ -84,6 +86,8 @@ export function pickSportMedia(clips: readonly CatalogClip[]): Map<string, Catal
 }
 
 let bySport = new Map<string, CatalogMedia>();
+/** Catalog video path (e.g. local/videos/x.mp4) → its HLS master playlist path. */
+let hlsByVideo = new Map<string, string>();
 let version = 0;
 let loading: Promise<void> | null = null;
 const listeners = new Set<() => void>();
@@ -103,11 +107,34 @@ export function loadMediaCatalog(): Promise<void> {
   loading ??= Promise.all([fetchClips('/media/catalog.json'), fetchClips('/media/local/catalog.json')]).then(
     ([open, local]) => {
       bySport = pickSportMedia([...local, ...open]);
+      hlsByVideo = new Map(
+        [...local, ...open].filter((c) => c.video && c.hls).map((c) => [c.video, c.hls!] as const),
+      );
       version++;
       listeners.forEach((l) => l());
     },
   );
   return loading;
+}
+
+/**
+ * The HLS version of a feed's MP4 URL, if the media server has one. Feeds from the engine announce
+ * the MP4 (that's what it scores), so this matches on the path under /media.
+ */
+export function hlsFor(videoUrl: string): string | undefined {
+  let path: string;
+  try {
+    path = new URL(videoUrl, location.href).pathname;
+  } catch {
+    return undefined;
+  }
+  for (const [video, hls] of hlsByVideo) if (path.endsWith(`/${video}`)) return mediaUrl(`/media/${hls}`);
+  return undefined;
+}
+
+/** Waits for the catalog, but no longer than `ms` (playback falls back to the MP4). */
+export function mediaCatalogReady(ms: number): Promise<void> {
+  return Promise.race([loadMediaCatalog(), new Promise<void>((ok) => setTimeout(ok, ms))]);
 }
 
 /** The catalog clip for a sport, if the catalog has loaded and has one. */

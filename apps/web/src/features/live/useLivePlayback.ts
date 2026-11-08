@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { liveMediaTime, loopDelta, mod, type FeedState } from '@sportlight/shared';
 import { mediaUrl } from '../../lib/env';
+import { attachHls, type HlsHandle } from '../../lib/hls-playback';
 import { live } from '../../lib/live-client';
+import { hlsFor, mediaCatalogReady } from '../../lib/media-catalog';
 
 export type PlaybackPhase = 'loading' | 'playing' | 'paused' | 'buffering' | 'error' | 'ended';
 
@@ -24,6 +26,8 @@ const SYNC_MS = 1000;
 const HARD_SEEK_SEC = 2.5;
 const BUFFERING_DELAY_MS = 350;
 const MAX_RETRIES = 4;
+/** How long a tile waits for the media catalog (which says whether there's an HLS copy). */
+const CATALOG_WAIT_MS = 1500;
 /** Show "Go live" once playback is this far behind. */
 export const BEHIND_THRESHOLD_SEC = 2;
 
@@ -49,6 +53,7 @@ export function useLivePlayback(videoRef: RefObject<HTMLVideoElement>, feed: Fee
   const phaseRef = useRef<PlaybackPhase>('loading');
   const retriesRef = useRef(0);
   const bufferTimer = useRef<number>();
+  const [attempt, setAttempt] = useState(0);
 
   const setPhase = useCallback((phase: PlaybackPhase) => {
     phaseRef.current = phase;
@@ -75,7 +80,8 @@ export function useLivePlayback(videoRef: RefObject<HTMLVideoElement>, feed: Fee
 
   const src = mediaUrl(feed.source.url);
 
-  // Load the source; (re)establish the live position.
+  // Load the source; (re)establish the live position. The HLS copy when there is one (segments, and
+  // a small rendition for small tiles), else the MP4 itself.
   useEffect(() => {
     const v = videoRef.current;
     if (!v || !src) return;
@@ -83,8 +89,33 @@ export function useLivePlayback(videoRef: RefObject<HTMLVideoElement>, feed: Fee
     retriesRef.current = 0;
     setPhase('loading');
     v.muted = optsRef.current.muted;
-    v.src = src;
-    v.load();
+    let cancelled = false;
+    let hls: HlsHandle | null = null;
+
+    const loadMp4 = () => {
+      hls?.destroy();
+      hls = null;
+      v.src = src;
+      v.load();
+    };
+    const start = async () => {
+      await mediaCatalogReady(CATALOG_WAIT_MS);
+      const hlsUrl = cancelled ? undefined : hlsFor(src);
+      if (cancelled) return;
+      if (!hlsUrl) return loadMp4();
+      try {
+        const handle = await attachHls(v, hlsUrl, targetTime(), () => {
+          if (cancelled || !hls) return;
+          hls = null; // already destroyed; the MP4 has the same timeline
+          loadMp4();
+        });
+        if (cancelled) return handle?.destroy();
+        if (!handle) return loadMp4();
+        hls = handle;
+      } catch {
+        if (!cancelled) loadMp4(); // hls.js chunk failed to load
+      }
+    };
 
     const markReady = () => {
       if (readyRef.current) return;
@@ -114,6 +145,8 @@ export function useLivePlayback(videoRef: RefObject<HTMLVideoElement>, feed: Fee
       }, BUFFERING_DELAY_MS);
     };
     const onError = () => {
+      if (hls?.managed) return; // hls.js retries, then falls back to the MP4 itself
+      if (hls) return loadMp4(); // native HLS failed: same timeline in the MP4
       if (retriesRef.current >= MAX_RETRIES) {
         setPhase('error');
         optsRef.current.onReady?.(); // reveal the tile so the error is visible
@@ -133,7 +166,10 @@ export function useLivePlayback(videoRef: RefObject<HTMLVideoElement>, feed: Fee
     v.addEventListener('waiting', onWaiting);
     v.addEventListener('stalled', onWaiting);
     v.addEventListener('error', onError);
+    void start();
     return () => {
+      cancelled = true;
+      hls?.destroy();
       clearTimeout(bufferTimer.current);
       v.removeEventListener('loadedmetadata', onMeta);
       v.removeEventListener('seeked', onSeeked);
@@ -142,7 +178,7 @@ export function useLivePlayback(videoRef: RefObject<HTMLVideoElement>, feed: Fee
       v.removeEventListener('stalled', onWaiting);
       v.removeEventListener('error', onError);
     };
-  }, [src, videoRef, targetTime, play, setPhase]);
+  }, [src, attempt, videoRef, targetTime, play, setPhase]);
 
   // A new run of the same feed starts at the live edge.
   useEffect(() => {
@@ -227,15 +263,7 @@ export function useLivePlayback(videoRef: RefObject<HTMLVideoElement>, feed: Fee
     setStatus((s) => ({ ...s, lagSec: 0 }));
   }, [videoRef, targetTime, play, setPhase]);
 
-  const retry = useCallback(() => {
-    const v = videoRef.current;
-    if (!v || !src) return;
-    retriesRef.current = 0;
-    readyRef.current = false;
-    setPhase('loading');
-    v.src = src;
-    v.load();
-  }, [videoRef, src, setPhase]);
+  const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
   return { status, togglePlay, goLive, retry };
 }

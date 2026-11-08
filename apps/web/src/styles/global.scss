@@ -272,6 +272,38 @@ svg {
   animation: sl-spin 0.9s linear infinite;
 }
 
+// Loading placeholder for media: a soft sweep over the video background.
+@keyframes sl-shimmer {
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -50% 0;
+  }
+}
+
+.sl-skeleton {
+  background-color: var(--video-bg);
+  background-image: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgba(247, 248, 244, 0.06) 50%,
+    transparent 70%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: sl-shimmer 1.6s ease-in-out infinite;
+}
+
+[data-motion='reduce'] .sl-skeleton {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion='full']) .sl-skeleton {
+    animation: none;
+  }
+}
+
 .app-top {
   position: sticky;
   top: 0;

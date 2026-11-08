@@ -114,11 +114,11 @@ export function LivePage() {
   // Announce window changes for screen-reader users.
   const announcement = useMemo(() => {
     const mainChanged = lastChanges.some(
-      (c) => (c.type === 'moved' && c.to === 'main') || (c.type === 'placed' && c.slot === 'main'),
+      (c) => (c.type === 'moved' && c.to === 'main') || ((c.type === 'placed' || c.type === 'replaced') && c.slot === 'main'),
     );
     const main = assignment.main;
     if (mainChanged && main) return `Now in the main window: ${main.event.title}`;
-    const replaced = lastChanges.find((c) => c.type === 'replaced');
+    const replaced = lastChanges.find((c) => c.type === 'replaced' && c.slot !== 'main');
     if (replaced) {
       const f = feedMap[replaced.feedId];
       return f ? `${f.event.title} joined the side windows` : '';

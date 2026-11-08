@@ -61,7 +61,7 @@ export function BestOfToday() {
       {status === 'loading' ? (
         <div className={styles.grid} aria-busy>
           {Array.from({ length: 12 }, (_, i) => (
-            <div key={i} className={`${styles.skeleton} ${i === 0 ? styles.large : i < 3 ? styles.medium : ''}`} />
+            <div key={i} className={`${styles.skeleton} sl-skeleton ${i === 0 ? styles.large : i < 3 ? styles.medium : ''}`} />
           ))}
         </div>
       ) : visible.length === 0 ? (

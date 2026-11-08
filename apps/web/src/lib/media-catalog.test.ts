@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { pickSportMedia } from './media-catalog';
 
 const thumbs = (id: string, count: number) => ({ template: `thumbs/${id}/{index}.jpg`, intervalSec: 10, count });
@@ -49,5 +49,29 @@ describe('landing media from the catalog', () => {
       { id: 'c', sportId: 'chess', dataset: 'commons-open-v1', video: 'videos/c.mp4', poster: 'posters/c.jpg', durationSec: 20 },
     ]);
     expect(media.get('chess')).toEqual({ video: '/media/videos/c.mp4#t=4', poster: '/media/posters/c.jpg', startSec: 4, broadcast: false });
+  });
+});
+
+describe('HLS copies of feed videos', () => {
+  it('maps a feed MP4 to its HLS playlist, and leaves others on the MP4', async () => {
+    vi.resetModules();
+    vi.stubGlobal('location', new URL('http://localhost:5173/live'));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => ({
+        ok: true,
+        json: async () => ({
+          clips: url.includes('/local/')
+            ? [{ id: 'fb', video: 'local/videos/fb_arg_fra_2022.mp4', hls: 'local/hls/fb/master.m3u8', durationSec: 10 }]
+            : [{ id: 'open', video: 'videos/open.mp4', durationSec: 10 }],
+        }),
+      })),
+    );
+    const { hlsFor, loadMediaCatalog } = await import('./media-catalog');
+    await loadMediaCatalog();
+    expect(hlsFor('/media/local/videos/fb_arg_fra_2022.mp4')).toBe('/media/local/hls/fb/master.m3u8');
+    expect(hlsFor('https://cdn.example.com/media/local/videos/fb_arg_fra_2022.mp4')).toBe('/media/local/hls/fb/master.m3u8');
+    expect(hlsFor('/media/videos/open.mp4')).toBeUndefined();
+    vi.unstubAllGlobals();
   });
 });

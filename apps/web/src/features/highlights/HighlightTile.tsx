@@ -3,9 +3,10 @@ import { Link } from 'react-router-dom';
 import type { Highlight, HighlightTier } from '@sportlight/shared';
 import { SportIcon } from '../../components/SportIcon';
 import { mediaUrl } from '../../lib/env';
+import { useHighlightStill } from '../../lib/frame-grab';
 import { highlightTitle, showsEventSeparately } from '../../lib/highlights';
 import { formatDuration, formatTimeOfDay } from '../../lib/format';
-import { useMediaQuery, useReducedMotion } from '../../lib/hooks';
+import { useMediaQuery, useNearViewport, useReducedMotion } from '../../lib/hooks';
 import styles from './HighlightTile.module.scss';
 
 const PREVIEW_DELAY_MS = 280;
@@ -23,7 +24,11 @@ export function HighlightTile({
   const canHover = useMediaQuery('(hover: hover)');
   const reduced = useReducedMotion();
   const [preview, setPreview] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
   const timer = useRef<number>();
+  const tileRef = useRef<HTMLAnchorElement>(null);
+  const nearView = useNearViewport(tileRef);
+  const still = useHighlightStill(h, nearView);
 
   const start = () => {
     if (!canHover || reduced) return;
@@ -33,23 +38,40 @@ export function HighlightTile({
   const stop = () => {
     clearTimeout(timer.current);
     setPreview(false);
+    setPreviewing(false);
   };
   useEffect(() => () => clearTimeout(timer.current), []);
 
   return (
     <Link
+      ref={tileRef}
       to={`/best/${h.id}`}
-      className={`${styles.tile} ${styles[tier]}`}
+      className={`${styles.tile} ${styles[tier]} ${still.ready || still.failed ? '' : 'sl-skeleton'}`}
+      data-loaded={still.ready || undefined}
       onPointerEnter={start}
       onPointerLeave={stop}
       onFocus={start}
       onBlur={stop}
       aria-label={`${highlightTitle(h)}, ${h.event.title}, peak intensity ${Math.round(h.peak.score)}, ${formatDuration(h.clip.durationSec)} at ${formatTimeOfDay(h.peak.at, timezone)}`}
     >
-      {h.thumbnailUrl && (
-        <img className={styles.thumb} src={mediaUrl(h.thumbnailUrl)} alt="" loading="lazy" decoding="async" />
+      {still.failed && <span className={styles.fallback} aria-hidden><SportIcon sportId={h.sportId} size={tier === 'large' ? 56 : 32} strokeWidth={1.25} /></span>}
+      {still.src && (
+        <img
+          key={still.src}
+          className={`${styles.thumb} ${still.ready ? styles.thumbShown : ''}`}
+          src={still.src}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          onLoad={still.onLoad}
+          onError={still.onError}
+          ref={(img) => {
+            if (img?.complete && img.naturalWidth > 0 && !still.ready) still.onLoad();
+          }}
+        />
       )}
-      {preview && <PreviewVideo highlight={h} />}
+      {preview && <PreviewVideo highlight={h} onShown={() => setPreviewing(true)} />}
+      {preview && !previewing && <span className={styles.buffering} aria-hidden />}
       <span className={styles.peak}>
         <span className="mono">{Math.round(h.peak.score)}</span>
       </span>
@@ -69,7 +91,7 @@ export function HighlightTile({
   );
 }
 
-function PreviewVideo({ highlight: h }: { highlight: Highlight }) {
+function PreviewVideo({ highlight: h, onShown }: { highlight: Highlight; onShown: () => void }) {
   const ref = useRef<HTMLVideoElement>(null);
   const [shown, setShown] = useState(false);
   useEffect(() => {
@@ -82,7 +104,10 @@ function PreviewVideo({ highlight: h }: { highlight: Highlight }) {
     const onTime = () => {
       if (v.currentTime >= h.clip.mediaEnd) v.currentTime = h.clip.mediaStart;
     };
-    const onPlaying = () => setShown(true);
+    const onPlaying = () => {
+      setShown(true);
+      onShown();
+    };
     v.addEventListener('loadedmetadata', onMeta);
     v.addEventListener('timeupdate', onTime);
     v.addEventListener('playing', onPlaying);

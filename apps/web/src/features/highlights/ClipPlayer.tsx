@@ -2,6 +2,7 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useSta
 import { Maximize, Pause, Play, RotateCcw, Volume2, VolumeX } from 'lucide-react';
 import type { Highlight } from '@sportlight/shared';
 import { mediaUrl } from '../../lib/env';
+import { useHighlightStill } from '../../lib/frame-grab';
 import { formatDuration } from '../../lib/format';
 import styles from './ClipPlayer.module.scss';
 
@@ -21,6 +22,8 @@ export const ClipPlayer = forwardRef<ClipPlayerHandle, { highlight: Highlight; o
     const [playing, setPlaying] = useState(false);
     const [muted, setMuted] = useState(true);
     const [loading, setLoading] = useState(true);
+    const [frameShown, setFrameShown] = useState(false);
+    const still = useHighlightStill(h);
     const [pos, setPos] = useState(0);
     const { mediaStart, mediaEnd } = h.clip;
     const duration = mediaEnd - mediaStart;
@@ -33,6 +36,7 @@ export const ClipPlayer = forwardRef<ClipPlayerHandle, { highlight: Highlight; o
       const v = videoRef.current;
       if (!v) return;
       setLoading(true);
+      setFrameShown(v.readyState >= 2);
       const begin = () => {
         v.currentTime = mediaStart;
         v.play().catch(() => setPlaying(false));
@@ -110,18 +114,31 @@ export const ClipPlayer = forwardRef<ClipPlayerHandle, { highlight: Highlight; o
     }, [toggle]);
 
     return (
-      <div ref={wrapRef} className={styles.player}>
+      <div ref={wrapRef} className={`${styles.player} ${frameShown || still.ready ? '' : 'sl-skeleton'}`}>
+        {/* Still under the video until its first frame decodes (the video's own poster can't fade in). */}
+        {still.src && !frameShown && (
+          <img
+            className={`${styles.still} ${still.ready ? styles.stillShown : ''}`}
+            src={still.src}
+            alt=""
+            onLoad={still.onLoad}
+            onError={still.onError}
+          />
+        )}
         <video
           ref={videoRef}
-          className={styles.video}
           src={mediaUrl(h.source.url)}
-          poster={mediaUrl(h.thumbnailUrl)}
+          className={`${styles.video} ${frameShown ? styles.videoShown : ''}`}
           muted={muted}
           playsInline
           preload="auto"
           onPlay={() => setPlaying(true)}
           onPause={() => setPlaying(false)}
-          onPlaying={() => setLoading(false)}
+          onLoadedData={() => setFrameShown(true)}
+          onPlaying={() => {
+            setLoading(false);
+            setFrameShown(true);
+          }}
           onWaiting={() => setLoading(true)}
           onClick={toggle}
         />

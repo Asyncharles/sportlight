@@ -18,8 +18,10 @@ import type { SlotId } from './ws.js';
  *      `user`   — "stays on the user's choice": filled automatically only when empty (initially with
  *                 the highest-ranked feed, later when its feed stops being eligible).
  *      `follow` — "follows the action": additionally, once main has been up for `minDisplayMs`, a
- *                 visible side feed that out-ranks it by `replaceMargin` for the challenge window
- *                 swaps into main (both keep their players).
+ *                 feed that out-ranks it by `replaceMargin` for the challenge window takes main. A
+ *                 visible side feed swaps with main (both keep their players); a feed outside the
+ *                 layout replaces main directly, and the old main feed takes the weakest side window
+ *                 if it out-ranks that feed.
  *  - Empty side slots are filled immediately with the best unplaced feeds.
  *  - A side feed can be replaced automatically once it has been visible for `minDisplayMs`, when a
  *    challenger out-ranks the weakest such side feed by `replaceMargin` points continuously for
@@ -97,7 +99,7 @@ export interface UpcomingSwitch {
   feedId: FeedId;
   /** Feed currently in `slot`. */
   previous: FeedId;
-  /** `replace`: a hidden feed takes a side window. `promote`: a side feed swaps into main. */
+  /** `replace`: a hidden feed takes the window. `promote`: a side feed swaps into main. */
   kind: 'replace' | 'promote';
   /** When the countdown started and when it completes (ms, client clock). */
   since: number;
@@ -222,6 +224,14 @@ export function reconcile(prev: SelectionState, input: SelectionInput): Reconcil
   const challengers: Record<string, number> = {};
   if (input.locked) return { state: { slots, challengers }, changes, upcoming };
 
+  // In "follow the action", a feed that clearly out-ranks an unpinned main (once main has served its
+  // minimum display time) is headed for main, wherever it is now.
+  const main = slots.main;
+  const mainRank = main && ranked.get(main.feedId);
+  const mainOpen =
+    input.mainPolicy === 'follow' && !!main && !main.pinned && !!mainRank && now - main.placedAt >= config.minDisplayMs;
+  const beatsMain = (r: Ranked) => mainOpen && r.fresh && r.rank >= mainRank!.rank + config.replaceMargin;
+
   // 4. Threshold replacement of the weakest side feed that has served its minimum display time.
   const replaceable = sideSlots
     .flatMap((slot) => {
@@ -236,7 +246,8 @@ export function reconcile(prev: SelectionState, input: SelectionInput): Reconcil
     let winner: Ranked | undefined;
     let leader: { c: Ranked; since: number } | undefined;
     for (const c of unplaced()) {
-      if (!c.fresh || c.rank < target.r.rank + config.replaceMargin) continue;
+      // A feed that out-ranks main challenges main directly (step 5) instead of a side window.
+      if (!c.fresh || c.rank < target.r.rank + config.replaceMargin || beatsMain(c)) continue;
       const since = prev.challengers[c.feed.id] ?? now;
       challengers[c.feed.id] = since;
       if (!winner && now - since >= switchAfter) winner = c;
@@ -259,35 +270,43 @@ export function reconcile(prev: SelectionState, input: SelectionInput): Reconcil
     }
   }
 
-  // 5. "Follow the action": a visible side feed that clearly out-ranks main swaps into it.
-  const main = slots.main;
-  const mainRank = main && ranked.get(main.feedId);
+  // 5. "Follow the action": a feed that clearly out-ranks main takes it. A visible side feed swaps
+  //    with main; a feed outside the layout replaces main directly (so a single window still follows
+  //    the action), and the old main feed takes the weakest side window if it out-ranks that feed.
   const replacedThisPass = changes.some((c) => c.type === 'replaced');
-  if (
-    input.mainPolicy === 'follow' &&
-    !replacedThisPass &&
-    main &&
-    !main.pinned &&
-    mainRank &&
-    now - main.placedAt >= config.minDisplayMs
-  ) {
-    const best = sideSlots
-      .flatMap((slot) => {
-        const a = slots[slot];
-        const r = a && ranked.get(a.feedId);
-        return a && r && !a.pinned && r.fresh && r.rank >= mainRank.rank + config.replaceMargin
-          ? [{ slot, a, r }]
-          : [];
-      })
-      .sort((x, y) => compareCandidates(x.r, y.r))[0];
+  if (mainOpen && !replacedThisPass && main && mainRank) {
+    const fromSide = sideSlots.flatMap((slot) => {
+      const a = slots[slot];
+      const r = a && ranked.get(a.feedId);
+      return a && r && !a.pinned && beatsMain(r) ? [{ slot: slot as SlotId | null, r }] : [];
+    });
+    const fromOutside = unplaced()
+      .filter(beatsMain)
+      .map((r) => ({ slot: null as SlotId | null, r }));
+    const best = [...fromSide, ...fromOutside].sort((x, y) => compareCandidates(x.r, y.r))[0];
     if (best) {
       const key = MAIN_CHALLENGE_PREFIX + best.r.feed.id;
       const since = prev.challengers[key] ?? now;
       if (now - since >= switchAfter) {
         slots.main = { feedId: best.r.feed.id, placedAt: now, origin: 'auto' };
-        slots[best.slot] = { feedId: main.feedId, placedAt: now, origin: 'auto' };
-        changes.push({ type: 'moved', from: best.slot, to: MAIN_SLOT, feedId: best.r.feed.id });
-        changes.push({ type: 'moved', from: MAIN_SLOT, to: best.slot, feedId: main.feedId });
+        if (best.slot) {
+          slots[best.slot] = { feedId: main.feedId, placedAt: now, origin: 'auto' };
+          changes.push({ type: 'moved', from: best.slot, to: MAIN_SLOT, feedId: best.r.feed.id });
+          changes.push({ type: 'moved', from: MAIN_SLOT, to: best.slot, feedId: main.feedId });
+        } else {
+          changes.push({ type: 'replaced', slot: MAIN_SLOT, feedId: best.r.feed.id, previous: main.feedId });
+          const weakest = sideSlots
+            .flatMap((slot) => {
+              const a = slots[slot];
+              const r = a && ranked.get(a.feedId);
+              return a && r && !a.pinned && r.rank < mainRank.rank ? [{ slot, r }] : [];
+            })
+            .sort((x, y) => x.r.rank - y.r.rank || (x.slot < y.slot ? -1 : 1))[0];
+          if (weakest) {
+            slots[weakest.slot] = { feedId: main.feedId, placedAt: now, origin: 'auto' };
+            changes.push({ type: 'moved', from: MAIN_SLOT, to: weakest.slot, feedId: main.feedId });
+          }
+        }
       } else {
         challengers[key] = since;
         if (countdownMs > 0 && now - since >= config.challengeMs) {
@@ -295,7 +314,7 @@ export function reconcile(prev: SelectionState, input: SelectionInput): Reconcil
             slot: MAIN_SLOT,
             feedId: best.r.feed.id,
             previous: main.feedId,
-            kind: 'promote',
+            kind: best.slot ? 'promote' : 'replace',
             since: since + config.challengeMs,
             at: since + switchAfter,
             key,

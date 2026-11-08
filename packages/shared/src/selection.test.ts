@@ -273,6 +273,48 @@ describe('viewer options', () => {
     expect(ids(r.state)).toEqual(['c', 'b', 'a', 'd']);
   });
 
+  it('follows the action with a single window: a hotter feed outside the layout replaces main', () => {
+    const step = opts({ mainPolicy: 'follow', sideSlots: [], countdownMs: 2000 });
+    let s = step(emptySelection(), base, 0).state;
+    expect(ids(s)).toEqual(['a', undefined, undefined, undefined]);
+    const surge = base.map((f) => (f.id === 'c' ? { ...f, intensity: { ...f.intensity!, score: 100 } } : f));
+    s = step(s, surge, 20_000).state;
+    let r = step(s, surge, 23_000);
+    expect(r.upcoming).toEqual([
+      { slot: 'main', feedId: 'c', previous: 'a', kind: 'replace', since: 23_000, at: 25_000, key: 'main>c' },
+    ]);
+    r = step(r.state, surge, 25_000);
+    expect(ids(r.state)).toEqual(['c', undefined, undefined, undefined]);
+    expect(r.changes).toContainEqual({ type: 'replaced', slot: 'main', feedId: 'c', previous: 'a' });
+  });
+
+  it('sends a feed that out-ranks main straight to main, and the old main to the weakest side window', () => {
+    const step = opts({ mainPolicy: 'follow', sideSlots: ['side-1'] });
+    let s = step(emptySelection(), base, 0).state;
+    expect(ids(s)).toEqual(['a', 'b', undefined, undefined]);
+    const hot = [...base, feed('x', 100)];
+    for (let t = 20_000; t <= 30_000; t += 250) {
+      s = step(s, hot, t).state;
+      expect(s.slots['side-1']?.feedId).not.toBe('x'); // never hops through the side window
+    }
+    expect(ids(s)).toEqual(['x', 'a', undefined, undefined]); // a (90) beats b (70) for the side window
+  });
+
+  it('drops the old main when it is weaker than every side feed', () => {
+    const step = opts({ mainPolicy: 'follow', sideSlots: ['side-1'] });
+    let s = step(emptySelection(), base, 0).state;
+    const fading = [...base.map((f) => (f.id === 'a' ? { ...f, intensity: { ...f.intensity!, score: 40 } } : f)), feed('x', 80)];
+    for (let t = 20_000; t <= 30_000; t += 1000) s = step(s, fading, t).state;
+    expect(ids(s)).toEqual(['x', 'b', undefined, undefined]);
+  });
+
+  it('keeps main on the viewer’s choice when a hotter feed is outside the layout', () => {
+    const step = opts({ sideSlots: [] });
+    let s = step(emptySelection(), base, 0).state;
+    for (let t = 20_000; t <= 40_000; t += 1000) s = step(s, [...base, feed('x', 100)], t).state;
+    expect(ids(s)).toEqual(['a', undefined, undefined, undefined]);
+  });
+
   it('never replaces a pinned side window, and challenges the next weakest instead', () => {
     let s = run(emptySelection(), [...base, feed('e', 10)], 0).state;
     s = setPinned(s, 'side-3', true, 0); // d is the weakest

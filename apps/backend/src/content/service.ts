@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { stat } from 'node:fs/promises';
+import { rm, stat } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
 import {
@@ -259,6 +259,11 @@ export class ContentService {
           json(res, 200, this.overview(session));
           return true;
         }
+        if (path === '/jobs/clear') {
+          const cleared = await this.clearJobs();
+          json(res, 200, { ...this.overview(session), cleared });
+          return true;
+        }
         if (path === '/jobs/action') {
           const parsed = actionSchema.safeParse(await readJson(req));
           if (!parsed.success) {
@@ -344,6 +349,22 @@ export class ContentService {
       changed++;
     }
     return changed ? undefined : 'None of the selected Shorts can be changed in their current state.';
+  }
+  /**
+   * Empties the Shorts library: every Short and its rendered video, except ones mid-render or with a
+   * YouTube upload in flight (dropping those could orphan or duplicate an upload). Published videos stay
+   * on YouTube. Highlights already seen are not turned back into Shorts.
+   */
+  async clearJobs(): Promise<{ removed: number; kept: number }> {
+    const state = this.store.state;
+    const busy = (j: Job) =>
+      ['rendering', 'uploading', 'processing'].includes(j.status) || Boolean(j.uploadSession && j.status !== 'published');
+    const removed = state.jobs.filter((j) => !busy(j));
+    state.jobs = state.jobs.filter(busy);
+    await this.store.save();
+    for (const job of removed) await rm(join(this.store.dir, job.id), { recursive: true, force: true });
+    this.log.info('cleared shorts', { removed: removed.length, kept: state.jobs.length });
+    return { removed: removed.length, kept: state.jobs.length };
   }
   private redirectUri() {
     return `${this.options.appUrl}/api/content/auth/callback`;

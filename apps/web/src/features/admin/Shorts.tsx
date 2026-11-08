@@ -474,6 +474,26 @@ export function Shorts() {
             }}
             onLogout={() => void post('/logout')}
           />
+          <div className={admin.dialogSection}>
+            <h3>Clean up</h3>
+            <p className={admin.sub}>
+              Remove every Short and its rendered video from the library. Shorts that are rendering or uploading are
+              kept; published videos stay on YouTube.
+            </p>
+            <div className={admin.actions}>
+              <button
+                type="button"
+                className="sl-button small secondary"
+                disabled={disabled || !data?.jobs?.length}
+                onClick={() => {
+                  if (window.confirm(`Delete all ${data?.jobs?.length ?? 0} Shorts from the library? This cannot be undone.`))
+                    void post('/jobs/clear').then((ok) => ok && setSelected(new Set()));
+                }}
+              >
+                Clear all Shorts
+              </button>
+            </div>
+          </div>
         </Dialog>
       )}
     </main>

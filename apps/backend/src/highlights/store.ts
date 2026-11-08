@@ -1,6 +1,6 @@
 import { writeFileSync, renameSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
   dayKey,
@@ -153,6 +153,26 @@ export class HighlightStore {
 
   today(now = Date.now()): string {
     return dayKey(now, this.config.timezone);
+  }
+
+  /** Forget every highlight of every day, in memory and on disk. Returns the removed ids and the files freed. */
+  async clear(): Promise<{ removed: string[]; files: number; bytes: number }> {
+    const removed = this.all().map((h) => h.id);
+    this.byDay.clear();
+    this.dirty.clear();
+    let files = 0;
+    let bytes = 0;
+    if (this.persist) {
+      for (const name of await readdir(this.dir)) {
+        if (!/^\d{4}-\d{2}-\d{2}\.json(\.tmp)?$/.test(name)) continue;
+        const file = join(this.dir, name);
+        bytes += (await stat(file)).size;
+        await unlink(file);
+        files++;
+      }
+    }
+    this.log.info('cleared highlights', { count: removed.length, files });
+    return { removed, files, bytes };
   }
 
   async flush() {

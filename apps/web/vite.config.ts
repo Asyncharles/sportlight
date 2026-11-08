@@ -14,7 +14,7 @@ function devMedia(): Plugin {
   const dist = join(repoRoot, 'media/dist');
   // Engine demo footage is served straight from its own folder (npm run media:local), never copied.
   const footage = process.env.LOCAL_FOOTAGE_DIR ? resolve(process.env.LOCAL_FOOTAGE_DIR) : null;
-  const types: Record<string, string> = { '.mp4': 'video/mp4', '.jpg': 'image/jpeg', '.json': 'application/json', '.md': 'text/markdown' };
+  const types: Record<string, string> = { '.mp4': 'video/mp4', '.m4s': 'video/mp4', '.m3u8': 'application/vnd.apple.mpegurl', '.jpg': 'image/jpeg', '.json': 'application/json', '.md': 'text/markdown' };
   return {
     name: 'sportlight-dev-media',
     configureServer(server) {

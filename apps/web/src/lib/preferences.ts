@@ -27,7 +27,7 @@ export type MotionPreference = 'system' | 'reduce';
 
 export type LayoutId = 'table' | 'classic' | 'theatre' | 'quad';
 /** Phone-only layouts: every window fits the screen without scrolling. */
-export type PhoneLayoutId = 'stack' | 'trio' | 'phone-table';
+export type PhoneLayoutId = 'phone-table' | 'duo' | 'trio';
 export type SidebarSide = 'left' | 'right';
 export type SwitchAnimation = 'spotlight' | 'stinger' | 'flip';
 export type SwitchPace = 'calm' | 'balanced' | 'eager' | 'custom';
@@ -64,7 +64,7 @@ const KEY = 'sportlight.prefs.v1';
 export const DEFAULT_LIVE_PREFERENCES: LivePreferences = {
   beta3d: false,
   layout: 'theatre',
-  phoneLayout: 'stack',
+  phoneLayout: 'phone-table',
   sidebar: 'left',
   animation: 'spotlight',
   mainPolicy: 'user',

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer } from 'node:http';
@@ -160,6 +160,23 @@ describe('publishing safety and persistence', () => {
     expect(svc.store.state.jobs[0]?.readyAt).toBeGreaterThan(Date.now());
     await svc.tick();
     expect(svc.store.state.jobs).toHaveLength(2);
+    await svc.stop();
+  });
+  it('clears the Shorts library but keeps in-flight work and does not recreate cleared Shorts', async () => {
+    const svc = await service([highlight('first'), highlight('second', 80)]);
+    svc.store.state.settings.enabled = false;
+    await svc.tick();
+    expect(svc.store.state.jobs).toHaveLength(2);
+    const base = { highlight: highlight('old', 150), createdAt: 1, updatedAt: 1, readyAt: 1, attempts: 0, rendered: true };
+    svc.store.state.jobs.push({ ...base, id: 'up', status: 'uploading', uploadSession: 'x' });
+    svc.store.state.jobs.push({ ...base, id: 'done', status: 'published', videoId: 'v' });
+    await mkdir(join(svc.store.dir, 'done'), { recursive: true });
+    await writeFile(join(svc.store.dir, 'done', 'short.mp4'), 'video');
+    expect(await svc.clearJobs()).toEqual({ removed: 3, kept: 1 });
+    expect(svc.store.state.jobs.map((j) => j.id)).toEqual(['up']);
+    await expect(stat(join(svc.store.dir, 'done'))).rejects.toThrow();
+    await svc.tick();
+    expect(svc.store.state.jobs.map((j) => j.id)).toEqual(['up']);
     await svc.stop();
   });
   it('returns clips approved for a previously connected channel to the library', async () => {

@@ -1,5 +1,5 @@
 import { Link, NavLink, useMatch } from 'react-router-dom';
-import { Activity, ArrowLeft, ArrowRight, Box, Check, Clapperboard, ChevronDown, Columns2, Grid2x2, Lock, LockOpen, MoreHorizontal, PanelLeft, PanelTop, Rows3, Rows4, RectangleHorizontal, Settings, SlidersHorizontal, Trophy } from 'lucide-react';
+import { Activity, ArrowLeft, ArrowRight, Box, Check, Clapperboard, ChevronDown, Columns2, Grid2x2, Lock, LockOpen, MoreHorizontal, PanelLeft, PanelTop, Rows2, Rows3, RectangleHorizontal, Settings, SlidersHorizontal, Trophy } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useIsPhone, useNow } from '../lib/hooks';
 import { switchView } from '../lib/view-transition';
@@ -144,9 +144,9 @@ const VIEWS: Array<{ id: ViewId; label: string; icon: ReactNode }> = [
 
 /** Phones get their own views, each sized to fit the screen without scrolling. */
 const PHONE_VIEWS: Array<{ id: PhoneLayoutId; label: string; icon: ReactNode }> = [
-  { id: 'stack', label: 'Stack', icon: <Rows4 size={16} /> },
-  { id: 'trio', label: 'Trio', icon: <Rows3 size={16} /> },
   { id: 'phone-table', label: 'Details', icon: <PanelTop size={16} /> },
+  { id: 'duo', label: 'Duo', icon: <Rows2 size={16} /> },
+  { id: 'trio', label: 'Trio', icon: <Rows3 size={16} /> },
 ];
 
 /** View dropdown for the live page; 3D is the spatial room. */

@@ -302,48 +302,82 @@ export function Admin() {
   );
 }
 
-function SystemTools({ config }: { config: unknown }) {
-  const [message, setMessage] = useState('');
-  const [clearing, setClearing] = useState(false);
+type ClearTarget = 'highlights' | 'history' | 'archives';
 
-  async function clearStorage() {
-    if (
-      !window.confirm(
-        'Delete history and highlight archive files older than 7 days? Recent data and publishing jobs will be kept.',
-      )
-    )
-      return;
-    setClearing(true);
+const CLEANUPS: { target: ClearTarget; title: string; hint: string; button: string; confirm: string }[] = [
+  {
+    target: 'highlights',
+    title: 'Best of today',
+    hint: 'Every highlight from every day, including today. Viewers’ lists empty straight away; new moments still come in.',
+    button: 'Clear all highlights',
+    confirm: 'Delete every “Best of today” highlight for all days, including today? This cannot be undone.',
+  },
+  {
+    target: 'history',
+    title: 'Intensity history',
+    hint: 'The recorded intensity readings for all days. Live trend lines keep the last hour from memory.',
+    button: 'Clear all history',
+    confirm: 'Delete the intensity history for all days? This cannot be undone.',
+  },
+  {
+    target: 'archives',
+    title: 'Old archives',
+    hint: 'History and highlight files older than 7 days. Recent data is kept.',
+    button: 'Clear old archives',
+    confirm: 'Delete history and highlight archive files older than 7 days?',
+  },
+];
+
+function SystemTools({ config }: { config: unknown }) {
+  const [messages, setMessages] = useState<Partial<Record<ClearTarget, string>>>({});
+  const [clearing, setClearing] = useState<ClearTarget | null>(null);
+
+  async function clear(c: (typeof CLEANUPS)[number]) {
+    if (!window.confirm(c.confirm)) return;
+    setClearing(c.target);
+    let message: string;
     try {
-      const response = await fetch(apiUrl('/api/admin/storage/clear'), {
+      const response = await fetch(apiUrl(`/api/admin/storage/clear?target=${c.target}`), {
         method: 'POST',
         headers: { 'X-Sportlight-Action': 'clear-archived-storage' },
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const result = (await response.json()) as { files: number; bytes: number };
-      setMessage(`Cleared ${result.files} files (${(result.bytes / 1048576).toFixed(1)} MB).`);
+      const r = (await response.json()) as { files: number; bytes: number; items?: number };
+      const size = `${r.files} file${r.files === 1 ? '' : 's'}, ${(r.bytes / 1048576).toFixed(1)} MB`;
+      message =
+        r.items === undefined ? `Cleared ${size}.` : `Cleared ${r.items} highlight${r.items === 1 ? '' : 's'} (${size}).`;
     } catch (error) {
-      setMessage(`Cleanup failed: ${(error as Error).message}`);
+      message = `Cleanup failed: ${(error as Error).message}`;
     } finally {
-      setClearing(false);
+      setClearing(null);
     }
+    setMessages((m) => ({ ...m, [c.target]: message }));
   }
 
   return (
     <>
       <div className={styles.dialogSection}>
         <h3>Storage</h3>
+        {CLEANUPS.map((c) => (
+          <div key={c.target} className={styles.cleanup}>
+            <div>
+              <strong>{c.title}</strong>
+              <p className={styles.sub}>{c.hint}</p>
+              {messages[c.target] && (
+                <p className={styles.sub} role="status">
+                  {messages[c.target]}
+                </p>
+              )}
+            </div>
+            <button className="sl-button small" disabled={clearing !== null} onClick={() => void clear(c)}>
+              {clearing === c.target ? 'Clearing…' : c.button}
+            </button>
+          </div>
+        ))}
         <p className={styles.sub}>
-          Clear history and highlight archive files older than 7 days. Recent data, publishing jobs and videos are kept.
+          Shorts are cleared from the <a href="/admin/shorts">Shorts dashboard</a> (Publishing settings), behind its
+          Google sign-in.
         </p>
-        <div className={styles.actions}>
-          <button className="sl-button small" disabled={clearing} onClick={() => void clearStorage()}>
-            {clearing ? 'Clearing…' : 'Clear old archives'}
-          </button>
-          <span className={styles.sub} role="status">
-            {message}
-          </span>
-        </div>
       </div>
       <div className={styles.dialogSection}>
         <h3>Effective configuration</h3>

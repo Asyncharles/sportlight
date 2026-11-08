@@ -482,6 +482,27 @@
   }
 }
 
+.cleanup {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+  strong {
+    font-size: 14px;
+  }
+  p {
+    margin: 2px 0 0;
+  }
+  button {
+    flex-shrink: 0;
+  }
+  @media (max-width: 520px) {
+    flex-direction: column;
+  }
+}
+
 .pre {
   max-height: 40dvh;
   margin: 0;

@@ -37,7 +37,7 @@ Other scripts: `npm test` (Vitest), `npm run typecheck`, `npm run build`.
 
 ### Engine demo feeds (football, F1, NBA, weightlifting)
 
-The four SportlightEngine demo clips (`media/local-sources.json`) play as feeds whose ids are the engine's `feed_id`s from `config/feeds.yaml`. The footage is private broadcast video, so it is never copied into the repo, an image or anything public. `npm run media:local` only writes posters, thumbnails and `media/dist/local/catalog.json`, and the media server serves the MP4s straight from the footage folder, byte for byte the files the engine's pushers loop.
+The four SportlightEngine demo clips (`media/local-sources.json`) play as feeds whose ids are the engine's `feed_id`s from `config/feeds.yaml`. The footage is private broadcast video, so it is never copied into the repo, an image or anything public. `npm run media:local` writes posters, thumbnails, `media/dist/local/catalog.json` and an HLS copy of each clip (`media/dist/local/hls/<id>/`), and the media server serves the MP4s straight from the footage folder, byte for byte the files the engine's pushers loop. The live screen plays the HLS copy when there is one: the source video cut into ~5 s segments without re-encoding (same timeline, so it stays in step with the engine), plus a 360p rendition that small tiles use. It starts from a few KB of playlist instead of the MP4's index (7–8 MB for a full match) and falls back to the MP4 if HLS fails. The 360p encode takes a few minutes per hour of footage; `--no-hls` skips it. This HLS copy is private footage too: it lives next to the posters, never in the repo or an image.
 
 ```bash
 npm run media:local -- --from=C:/footage/clips      # or the VM's data/samples
@@ -50,7 +50,7 @@ In Docker, add the overlay: `LOCAL_FOOTAGE_DIR=... docker compose -f docker-comp
 
 **On the GCP site, for a demo.** Run the deploy workflow with `demo_footage` ticked. The VM pulls `gs://<bucket>/samples/` (except `timing_audio_only/`), and the posters, thumbnails and catalog from `gs://<bucket>/sportlight-local/`, then starts with the overlay. `demo_feed_set` picks `all` (also publish the open clips as extra feeds) or `local` (only our footage). The landing page then leads with these broadcasts. To take the footage down, redeploy with `demo_footage` unticked: the VM deletes it. One-off setup:
 
-- Upload the posters, thumbnails and catalog once, after `npm run media:local`: `gcloud storage cp -r media/dist/local/* gs://<bucket>/sportlight-local/`.
+- Upload the posters, thumbnails, HLS copies and catalog once, after `npm run media:local`: `gcloud storage cp -r media/dist/local/* gs://<bucket>/sportlight-local/`.
 - The VM's service account needs read access to the bucket.
 - The bucket defaults to `sportlight-514020-si-private`; set the repository variable `DEMO_FOOTAGE_BUCKET` to change it.
 

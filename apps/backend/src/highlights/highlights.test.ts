@@ -1,3 +1,6 @@
+import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_HIGHLIGHT_CONFIG, type FeedState } from '@sportlight/shared';
 import { createLogger } from '../logger.js';
@@ -103,6 +106,24 @@ describe('HighlightStore', () => {
     expect(h.clip.mediaEnd).toBeLessThanOrEqual(60);
     expect(h.thumbnailUrl).toMatch(/^\/t\/\d+\.jpg$/);
     expect(h.day).toBe('2026-11-07');
+  });
+
+  it('clears every day of highlights from memory and disk', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'sportlight-hl-'));
+    try {
+      const s = new HighlightStore(dir, cfg, log);
+      await s.init(T0);
+      s.addMoment(moment(10, 90), feed(), () => []);
+      await writeFile(join(dir, 'highlights', '2026-10-01.json'), '[]');
+      await writeFile(join(dir, 'highlights', 'notes.txt'), 'keep');
+      const cleared = await s.clear();
+      expect(cleared.removed).toHaveLength(1);
+      expect(cleared.files).toBe(2);
+      expect(s.all()).toEqual([]);
+      expect(await readdir(join(dir, 'highlights'))).toEqual(['notes.txt']);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it('merges overlapping moments of the same run', () => {
