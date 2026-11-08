@@ -25,7 +25,7 @@ jobs:
       - run: npm test
       - run: npm run typecheck
       - run: npm run build
-            - name: Compose files parse (dummy values; nothing secret here)
+      - name: Compose files parse (dummy values; nothing secret here)
         env:
           AMQP_URL: amqp://ci:ci@broker.invalid:5672/ci
           PUBLIC_HOST: ci.invalid
