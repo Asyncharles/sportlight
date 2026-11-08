@@ -4,6 +4,7 @@ import { mediaUrl } from '../../lib/env';
 import { attachHls, type HlsHandle } from '../../lib/hls-playback';
 import { live } from '../../lib/live-client';
 import { hlsFor, mediaCatalogReady } from '../../lib/media-catalog';
+import { releaseVideo } from '../../lib/release-video';
 
 export type PlaybackPhase = 'loading' | 'playing' | 'paused' | 'buffering' | 'error' | 'ended';
 
@@ -91,6 +92,7 @@ export function useLivePlayback(videoRef: RefObject<HTMLVideoElement>, feed: Fee
     v.muted = optsRef.current.muted;
     let cancelled = false;
     let hls: HlsHandle | null = null;
+    let retryTimer: number | undefined;
 
     const loadMp4 = () => {
       hls?.destroy();
@@ -153,7 +155,7 @@ export function useLivePlayback(videoRef: RefObject<HTMLVideoElement>, feed: Fee
         return;
       }
       const delay = 1000 * 2 ** retriesRef.current++;
-      window.setTimeout(() => {
+      retryTimer = window.setTimeout(() => {
         if (videoRef.current !== v) return;
         v.src = src;
         v.load();
@@ -171,12 +173,16 @@ export function useLivePlayback(videoRef: RefObject<HTMLVideoElement>, feed: Fee
       cancelled = true;
       hls?.destroy();
       clearTimeout(bufferTimer.current);
+      clearTimeout(retryTimer); // a late retry would reattach the old source
       v.removeEventListener('loadedmetadata', onMeta);
       v.removeEventListener('seeked', onSeeked);
       v.removeEventListener('playing', onPlaying);
       v.removeEventListener('waiting', onWaiting);
       v.removeEventListener('stalled', onWaiting);
       v.removeEventListener('error', onError);
+      // hls.js empties the element on destroy; the MP4 and native HLS paths set src directly, and a
+      // tile that leaves the stage would otherwise keep downloading.
+      releaseVideo(v);
     };
   }, [src, attempt, videoRef, targetTime, play, setPhase]);
 

@@ -4,6 +4,7 @@ import type { Highlight } from '@sportlight/shared';
 import { mediaUrl } from '../../lib/env';
 import { useHighlightStill } from '../../lib/frame-grab';
 import { formatDuration } from '../../lib/format';
+import { useReleaseVideo } from '../../lib/release-video';
 import styles from './ClipPlayer.module.scss';
 
 export interface ClipPlayerHandle {
@@ -27,6 +28,7 @@ export const ClipPlayer = forwardRef<ClipPlayerHandle, { highlight: Highlight; o
     const [pos, setPos] = useState(0);
     const { mediaStart, mediaEnd } = h.clip;
     const duration = mediaEnd - mediaStart;
+    useReleaseVideo(videoRef);
 
     useImperativeHandle(ref, () => ({ position: () => (videoRef.current?.currentTime ?? mediaStart) - mediaStart }), [
       mediaStart,

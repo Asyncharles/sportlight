@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useReducer, useState } from 'react';
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { ArrowUp, Volume2 } from 'lucide-react';
 import { getSport, type FeedState } from '@sportlight/shared';
 import { SportIcon } from '../../components/SportIcon';
 import { useReducedMotion } from '../../lib/hooks';
 import { broadcastSports, useMediaCatalog } from '../../lib/media-catalog';
+import { useReleaseVideo } from '../../lib/release-video';
 import { sportMedia } from '../../lib/sport-media';
 import styles from './WindowsIllustration.module.scss';
 
@@ -210,11 +211,15 @@ function Media({ sport, feeds, playing }: { sport: string; feeds: readonly FeedS
   // doesn't restart the clip.
   const catalog = useMediaCatalog();
   const media = useMemo(() => sportMedia(sport, feeds), [sport, catalog]); // eslint-disable-line react-hooks/exhaustive-deps
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const showVideo = playing && Boolean(media.video);
+  useReleaseVideo(videoRef, showVideo); // every sport rotation drops a layer and its player
   return (
     <div className={styles.media}>
       {media.poster && <img src={media.poster} alt="" className={styles.poster} draggable={false} />}
-      {playing && media.video && (
+      {showVideo && (
         <video
+          ref={videoRef}
           className={styles.video}
           src={media.video}
           poster={media.poster}
