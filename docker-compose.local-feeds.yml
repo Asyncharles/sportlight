@@ -21,5 +21,7 @@ services:
       FEED_SET: ${FEED_SET:-all}
       ENGINE_SCORES_URL: ${ENGINE_SCORES_URL:-}
       FEEDS_STATE: ${FEEDS_STATE:-}
+      # 1 when SportlightEngine publishes the four demo feeds itself: announce only the extra feeds.
+      ENGINE_OWNS_DEMO_FEEDS: ${ENGINE_OWNS_DEMO_FEEDS:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"

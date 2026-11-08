@@ -15,7 +15,7 @@ import { openDatasetFeeds } from './open-dataset.js';
 import { planLive } from './live-slots.js';
 import { FeedClocks, offsetFor, parseFeedsState, streamTimeFor } from './feed-clock.js';
 import { followEngineScores, scoreTimeMs, type EngineScore } from './engine-scores.js';
-import { LOCAL_DATASET, localFeeds } from './local-feeds.js';
+import { LOCAL_DATASET, hasDemoClips, isExtraFeed, publishedLocalFeeds } from './local-feeds.js';
 
 /**
  * Mock feed provider. Publishes the demo scenario to RabbitMQ exactly as a real provider adapter
@@ -36,6 +36,8 @@ const config = {
   engineScoresUrl: env.ENGINE_SCORES_URL ?? '',
   /** URL or file path of the engine pushers' run/feeds_state.json (each feed's start time). */
   feedsState: env.FEEDS_STATE ?? '',
+  /** SportlightEngine announces the four demo feeds itself; publish only the extra feeds. */
+  engineOwnsDemoFeeds: ['1', 'true'].includes((env.ENGINE_OWNS_DEMO_FEEDS ?? '').toLowerCase()),
   /** Base URL browsers use to fetch media (origin-relative by default). */
   mediaPublicBase: (env.MEDIA_PUBLIC_BASE ?? '/media').replace(/\/$/, ''),
   provider: env.PROVIDER_ID ?? 'mock-provider',
@@ -243,6 +245,8 @@ const runs = new Map<string, Run>();
 const activeFeeds: DemoFeed[] = config.feedSet === 'local' ? [] : [...DEMO_FEEDS];
 const clocks = new FeedClocks();
 /** Engine scores replace simulated intensity for local feeds while the engine is configured. */
+/** The engine's demo clips are in the media catalog (refreshed with it). */
+let demoClipsPresent = false;
 const engineDriven = (feedId: string, catalog: Map<string, CatalogClip>) =>
   Boolean(config.engineScoresUrl) && catalog.get(feedId)?.dataset === LOCAL_DATASET;
 
@@ -279,7 +283,7 @@ function announce(feed: DemoFeed, run: Run, now: number) {
         ...(feed.venue ? { venue: feed.venue } : {}),
         broadcaster: feed.broadcaster,
         // With the engine's demo feeds on air, everything else is extra (hidden until a viewer opts in).
-        ...(!feed.pinned && activeFeeds.some((f) => f.pinned) ? { extra: true } : {}),
+        ...(isExtraFeed(feed, demoClipsPresent) ? { extra: true } : {}),
       },
       source: run.source,
     }),
@@ -408,7 +412,8 @@ async function main() {
       delete feed.competitionId;
     }
   }
-  activeFeeds.push(...localFeeds([...catalog.values()]));
+  demoClipsPresent = hasDemoClips([...catalog.values()]);
+  activeFeeds.push(...publishedLocalFeeds([...catalog.values()], config.engineOwnsDemoFeeds));
   const missing = activeFeeds.filter((f) => !catalog.has(f.clipId)).map((f) => f.id);
   if (missing.length) log('feeds without media are skipped', { missing });
   await refreshFeedsState();
@@ -420,6 +425,8 @@ async function main() {
     feedsState: config.feedsState || null,
     engineScores: config.engineScoresUrl || null,
     localFeeds: activeFeeds.filter((f) => f.pinned).map((f) => f.id),
+    engineOwnsDemoFeeds: config.engineOwnsDemoFeeds,
+    demoClipsPresent,
   });
   await connect();
 
@@ -436,10 +443,11 @@ async function main() {
         const known = new Set(activeFeeds.map((feed) => feed.id));
         const added = [
           ...(config.feedSet === 'local' ? [] : openDatasetFeeds([...next.values()])),
-          ...localFeeds([...next.values()]),
+          ...publishedLocalFeeds([...next.values()], config.engineOwnsDemoFeeds),
         ].filter((feed) => !known.has(feed.id));
         activeFeeds.push(...added);
         catalog = next;
+        demoClipsPresent = hasDemoClips([...next.values()]);
         if (added.length) log('new test media activated', { added: added.length, clips: catalog.size });
       })
       .finally(() => {

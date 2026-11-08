@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { FeedEventSchema } from '@sportlight/shared/schemas';
-import { LOCAL_DATASET, LOCAL_EXTRA_DATASET, localFeeds } from './local-feeds.js';
+import {
+  LOCAL_DATASET,
+  LOCAL_EXTRA_DATASET,
+  hasDemoClips,
+  isExtraFeed,
+  localFeeds,
+  publishedLocalFeeds,
+} from './local-feeds.js';
 import { planLive } from './live-slots.js';
 
 const event = { title: "Men's 79 kg, Group A", subtitle: 'Worlds 2025', broadcaster: { name: 'Weightlifting House' } };
@@ -26,6 +33,26 @@ describe('local engine feeds', () => {
       ['wl-demo-session', true],
     ]);
     expect(feeds.every((f) => f.peaks.every((p) => p.at < 900))).toBe(true);
+  });
+
+  it('leaves the demo feeds to SportlightEngine when it publishes them, and still hides the rest', () => {
+    const clips = [
+      { id: 'wl-demo-session', dataset: LOCAL_DATASET, sportId: 'weightlifting', event },
+      { id: 'wl-2025-m71', dataset: LOCAL_EXTRA_DATASET, sportId: 'weightlifting', event },
+    ];
+    expect(publishedLocalFeeds(clips, false).map((f) => f.id)).toEqual(['wl-demo-session', 'wl-2025-m71']);
+    const ours = publishedLocalFeeds(clips, true);
+    expect(ours.map((f) => f.id)).toEqual(['wl-2025-m71']);
+    // The demo clips are still in the catalog, so the tuning clip stays an extra feed.
+    expect(hasDemoClips(clips)).toBe(true);
+    expect(isExtraFeed(ours[0]!, hasDemoClips(clips))).toBe(true);
+  });
+
+  it('marks nothing extra on a deployment without the demo clips', () => {
+    const clips = [{ id: 'open-cycling-1', dataset: 'commons-open-v1', sportId: 'cycling', event }];
+    expect(hasDemoClips(clips)).toBe(false);
+    expect(isExtraFeed({}, hasDemoClips(clips))).toBe(false);
+    expect(isExtraFeed({ pinned: true }, true)).toBe(false);
   });
 
   it('carries the extra flag through the feed.started contract', () => {
