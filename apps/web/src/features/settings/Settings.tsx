@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ChevronRight, ExternalLink, Monitor, Moon, Sun } from 'lucide-react';
 import { SPORTS, type SportId } from '@sportlight/shared';
 import { mediaUrl } from '../../lib/env';
-import { useLive } from '../../lib/live-client';
+import { useExtraFeedCount, useLive } from '../../lib/live-client';
 import { COLOUR_THEMES, usePreferences, type MotionPreference, type ThemePreference } from '../../lib/preferences';
 import { Row, Segmented } from './controls';
 import { LiveSettings } from './LiveSettings';
@@ -20,6 +20,7 @@ interface Credit {
 export function Settings() {
   const { prefs, sports, update, reset } = usePreferences();
   const { status } = useLive();
+  const extraAvailable = useExtraFeedCount();
   const navigate = useNavigate();
   const { hash } = useLocation();
 
@@ -90,6 +91,23 @@ export function Settings() {
           <Link to="/settings/sports" className="sl-button small secondary">
             Manage <ChevronRight size={15} />
           </Link>
+        </Row>
+        <Row
+          label="Extra feeds"
+          hint={`Add the extra sample footage to the live page and Best of Today, alongside the main feeds. Their intensity is simulated. ${
+            extraAvailable ? `${extraAvailable} on air now.` : 'None on air now.'
+          }`}
+        >
+          <button
+            type="button"
+            role="switch"
+            aria-checked={prefs.extraFeeds}
+            aria-label="Extra feeds"
+            className="sl-button small secondary"
+            onClick={() => update({ extraFeeds: !prefs.extraFeeds })}
+          >
+            {prefs.extraFeeds ? 'Shown' : 'Hidden'}
+          </button>
         </Row>
       </section>
 

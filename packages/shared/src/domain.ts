@@ -61,6 +61,11 @@ export interface EventInfo {
   venue?: string;
   /** Rights holder / channel carrying the stream, e.g. Sky Sports · Sky Sports Football. */
   broadcaster?: Broadcaster;
+  /**
+   * Extra sample footage beyond the main demo feeds. Viewers see it only after turning on extra
+   * feeds in Settings. Absent when there are no main demo feeds, so a normal deployment shows all.
+   */
+  extra?: boolean;
 }
 
 export interface Broadcaster {

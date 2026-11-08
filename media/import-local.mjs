@@ -1,8 +1,10 @@
 #!/usr/bin/env node
-// Engine demo footage on local disk → media/dist/local (catalog, posters, thumbnails).
+// Engine footage on local disk → media/dist/local (catalog, posters, thumbnails): the demo clips, and
+// the tuning clips as "extra" feeds that viewers can turn on in Settings.
 // The MP4s are not copied or re-encoded: the media server serves them straight from the footage
 // folder, so the browser plays the exact bytes the engine's pushers loop and t_video lines up.
-// Usage: npm run media:local -- --from=<footage dir> [--only=feed-id] [--force]
+// Usage: npm run media:local -- --from=<samples dir> [--only=feed-id] [--force]
+//        <samples dir> mirrors the bucket's samples/: demo clips at the top, tuning clips in tuning/<sport>/.
 //        (or set LOCAL_FOOTAGE_DIR instead of --from)
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -63,8 +65,10 @@ async function probe(file) {
   };
 }
 
+export const DATASETS = { demo: 'local-engine-v1', extra: 'local-extra-v1' };
+
 async function build(clip, footageDir, intervalSec, previous) {
-  const file = join(footageDir, clip.file);
+  const file = join(footageDir, ...clip.file.split('/'));
   if (!existsSync(file)) throw new Error(`missing ${file}`);
   const { size, mtimeMs } = await stat(file);
   const key = JSON.stringify({ clip, size, mtimeMs: Math.round(mtimeMs), intervalSec, version: 1 });
@@ -94,7 +98,7 @@ async function build(clip, footageDir, intervalSec, previous) {
     id: clip.id,
     sportId: clip.sportId,
     competitionId: clip.competitionId,
-    dataset: 'local-engine-v1',
+    dataset: DATASETS[clip.role ?? 'demo'],
     private: true,
     video: `local/videos/${clip.file}`,
     poster,

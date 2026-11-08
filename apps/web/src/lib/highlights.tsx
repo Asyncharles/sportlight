@@ -2,6 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import type { Highlight } from '@sportlight/shared';
 import { apiUrl } from './env';
 import { live, useLive } from './live-client';
+import { preferencesStore } from './preferences';
+import { useStore } from './store';
 
 interface HighlightsState {
   day: string | null;
@@ -66,10 +68,15 @@ export function HighlightsProvider({ children }: { children: ReactNode }) {
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
+/** Today's highlights as this viewer sees them: extra feeds' highlights only when extra feeds are on. */
 export function useHighlights(): HighlightsState {
   const v = useContext(Ctx);
   if (!v) throw new Error('useHighlights outside HighlightsProvider');
-  return v;
+  const showExtra = useStore(preferencesStore).extraFeeds;
+  return useMemo(
+    () => (showExtra || !v.highlights.some((h) => h.event.extra) ? v : { ...v, highlights: v.highlights.filter((h) => !h.event.extra) }),
+    [v, showExtra],
+  );
 }
 
 /** Display name of a highlight: its generated caption, falling back to the event title. */

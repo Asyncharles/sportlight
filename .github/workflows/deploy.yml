@@ -13,14 +13,14 @@ on:
         type: boolean
         default: false
       demo_footage:
-        description: Serve the four private demo clips (football, F1, NBA, weightlifting). Redeploy without it to take them down
+        description: Serve the private demo clips (4 demo feeds, plus 13 extra feeds viewers can turn on in Settings). Redeploy without it to take them down
         type: boolean
         default: false
       demo_feed_set:
-        description: With demo footage, which feeds go live (local = only the four demo feeds)
+        description: With demo footage, which feeds are published (all = also the open clips as extra feeds; local = only our footage)
         type: choice
-        options: [local, all]
-        default: local
+        options: [all, local]
+        default: all
 
 permissions: {}
 

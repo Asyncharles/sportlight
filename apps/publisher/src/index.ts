@@ -278,6 +278,8 @@ function announce(feed: DemoFeed, run: Run, now: number) {
         ...(feed.teamIds ? { teamIds: feed.teamIds } : {}),
         ...(feed.venue ? { venue: feed.venue } : {}),
         broadcaster: feed.broadcaster,
+        // With the engine's demo feeds on air, everything else is extra (hidden until a viewer opts in).
+        ...(!feed.pinned && activeFeeds.some((f) => f.pinned) ? { extra: true } : {}),
       },
       source: run.source,
     }),
