@@ -1,17 +1,11 @@
 #!/usr/bin/env bash
-# On si-web, as root, from /opt/sportlight-web/releases/<sha>. Called by deploy-reusable.yml.
+# On si-web, as root, from /opt/sportlight-web/releases/<sha>. Called by .github/workflows/deploy.yml.
 set -euo pipefail
 umask 077
-# Secrets are read from Secret Manager at deploy time. The exceptions are the Gemini key for
-# highlight descriptions and the Google sign-in settings for the Shorts page, taken from the
-# repository's .env (private repo) so they are set in one place. CONTENT_APP_URL and
-# CONTENT_ENCRYPTION_KEY stay prod-only (the repo's are for localhost).
-# Read them before .env is overwritten below; nothing else from the developer .env reaches the VM.
-REPO_KEYS='^(GEMINI_API_KEY|GEMINI_MODEL|GOOGLE_CLIENT_ID|GOOGLE_CLIENT_SECRET|CONTENT_ALLOWED_EMAILS)='
-REPO_ENV=$(grep -E "$REPO_KEYS" .env 2>/dev/null || true)
+# All app secrets (Gemini key, Google OAuth client, encryption key, allowed emails, broker URL)
+# come from the Secret Manager secret sportlight-web-env; nothing from a developer .env reaches the VM.
 {
-  gcloud secrets versions access latest --secret=sportlight-web-env | { grep -vE "$REPO_KEYS" || true; }; echo
-  if [[ -n "$REPO_ENV" ]]; then echo "$REPO_ENV"; fi
+  gcloud secrets versions access latest --secret=sportlight-web-env; echo
   cat release.env
   echo "COMPOSE_PROJECT_NAME=sportlight-web"   # fixed: volumes survive release dirs
 } > .env

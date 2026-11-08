@@ -41,8 +41,7 @@ jobs:
       ZONE: ${{ vars.GCP_ZONE }}
       VM: si-web
       IMAGE_TAG: ${{ inputs.image_tag || github.sha }}
-      # .env is shipped only for its GEMINI_*, GOOGLE_CLIENT_* and CONTENT_ALLOWED_EMAILS lines (deploy/remote-up.sh); never cat it in this workflow.
-      RELEASE_PATHS: .env docker-compose.yml docker-compose.external.yml docker-compose.local-feeds.yml docker deploy
+      RELEASE_PATHS: docker-compose.yml docker-compose.external.yml docker-compose.local-feeds.yml docker deploy
       DEMO_FOOTAGE: ${{ inputs.demo_footage }}
       DEMO_FOOTAGE_BUCKET: ${{ vars.DEMO_FOOTAGE_BUCKET || 'sportlight-514020-si-private' }}
       DEMO_FEED_SET: ${{ inputs.demo_feed_set }}

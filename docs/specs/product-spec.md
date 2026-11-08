@@ -31,8 +31,8 @@ Create an admin view of streams which speaks to the backend. It should provide a
 
 Use the supplied assets:
 
-- `UI-sketch.png` for the layout and interaction direction.
-- `brand.css` for brand tokens.
+- [`docs/ui-sketch.png`](../ui-sketch.png) for the layout and interaction direction.
+- [`brand.css`](../../brand.css) for brand tokens.
 - `/logos` for the logo assets, when supplied.
 
 The brand uses Manrope, IBM Plex Mono, lime `#C5FF00`, ink `#171917`, and paper `#F7F8F4`. Extend these into coherent light and dark themes.

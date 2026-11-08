@@ -7,4 +7,4 @@ data
 apps/backend/data
 # Media has its own build context (./media).
 media
-UI-sketch.png
+docs

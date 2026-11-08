@@ -21,9 +21,9 @@ Bundle up this app with docker for deployment with rabbit MQ config.
 
 UI: 
 
-See /UI-sketch.png. 
+See [the UI sketch](../ui-sketch.png). 
 
-See brand.css.
+See [brand.css](../../brand.css).
 
 See /logos. 
 
