@@ -3,6 +3,7 @@ import { ArrowUp, Volume2 } from 'lucide-react';
 import { getSport, type FeedState } from '@sportlight/shared';
 import { SportIcon } from '../../components/SportIcon';
 import { useReducedMotion } from '../../lib/hooks';
+import { useMediaCatalog } from '../../lib/media-catalog';
 import { sportMedia } from '../../lib/sport-media';
 import styles from './WindowsIllustration.module.scss';
 
@@ -19,7 +20,8 @@ const CHALLENGE_AT = 5;
 const CHALLENGE_TICKS = 4;
 const SWAP_AT = CHALLENGE_AT + CHALLENGE_TICKS;
 
-const ORDER = ['football', 'tennis', 'motorsport', 'basketball', 'rugby', 'ice-hockey', 'cycling', 'athletics', 'esports'];
+/** Sports the open media set has clips for. */
+const ORDER = ['football', 'tennis', 'motorsport', 'basketball', 'rugby', 'ice-hockey', 'cycling', 'athletics', 'chess'];
 
 interface StageState {
   n: number;
@@ -184,8 +186,10 @@ function Window({
 }
 
 function Media({ sport, feeds, playing }: { sport: string; feeds: readonly FeedState[]; playing: boolean }) {
-  // Resolve once per layer so a live snapshot arriving later doesn't restart the clip.
-  const media = useMemo(() => sportMedia(sport, feeds), [sport]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Resolve once per layer (and once the media catalog arrives) so a live snapshot arriving later
+  // doesn't restart the clip.
+  const catalog = useMediaCatalog();
+  const media = useMemo(() => sportMedia(sport, feeds), [sport, catalog]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div className={styles.media}>
       {media.poster && <img src={media.poster} alt="" className={styles.poster} draggable={false} />}
