@@ -2,9 +2,13 @@
 # On si-web, as root, from /opt/sportlight-web/releases/<sha>. Called by deploy-reusable.yml.
 set -euo pipefail
 umask 077
-# Secrets are read from Secret Manager at deploy time; none are in the repo or the release.
+# Secrets are read from Secret Manager at deploy time. The one exception is the Gemini key for
+# highlight descriptions, taken from the repository's .env (private repo) so it is set in one place.
+# Read it before .env is overwritten below; nothing else from the developer .env reaches the VM.
+REPO_GEMINI=$(grep -E '^GEMINI_(API_KEY|MODEL)=' .env 2>/dev/null || true)
 {
-  gcloud secrets versions access latest --secret=sportlight-web-env; echo
+  gcloud secrets versions access latest --secret=sportlight-web-env | { grep -vE '^GEMINI_(API_KEY|MODEL)=' || true; }; echo
+  if [[ -n "$REPO_GEMINI" ]]; then echo "$REPO_GEMINI"; fi
   cat release.env
   echo "COMPOSE_PROJECT_NAME=sportlight-web"   # fixed: volumes survive release dirs
 } > .env
