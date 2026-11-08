@@ -8,6 +8,7 @@ services:
     image: ${IMAGE_SPORTLIGHT_MEDIA}
     build: !reset null
     ports: !reset []
+    restart: unless-stopped
   backend:
     image: ${IMAGE_SPORTLIGHT_BACKEND}
     build: !reset null
@@ -22,6 +23,7 @@ services:
     image: ${IMAGE_SPORTLIGHT_WEB}
     build: !reset null
     ports: !reset []
+    restart: unless-stopped
   caddy:
     image: caddy:2.11.8     # check Docker Hub for the current exact 2.x tag before merging
     command: caddy reverse-proxy --from ${PUBLIC_HOST} --to web:8080

@@ -1,4 +1,4 @@
-# Manual deploy of the web stack to si-web through the engine repo's reusable workflow.
+# Manual deploy of the web stack to si-web over IAP SSH.
 # Environment `demo`: Charles approves; after DEMO_FREEZE_AT it also needs freeze_override.
 name: deploy
 
@@ -15,18 +15,86 @@ on:
 
 permissions: {}
 
+concurrency:
+  group: deploy-si-web
+  cancel-in-progress: false
+
 jobs:
   deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: demo
     permissions:
       contents: read
       id-token: write
-    # Pin to a commit SHA instead of @main once it settles.
-    uses: Morgs27/sports-intensity/.github/workflows/deploy-reusable.yml@main
-    with:
-      app: sportlight-web
-      vm: si-web
-      environment: demo
-      image_tag: ${{ inputs.image_tag || github.sha }}
-      freeze_override: ${{ inputs.freeze_override }}
-      images: sportlight-media sportlight-backend sportlight-publisher sportlight-web
-      release_paths: docker-compose.yml docker-compose.external.yml docker
+    env:
+      AR_REPO: ${{ vars.AR_REPO }}
+      ZONE: ${{ vars.GCP_ZONE }}
+      VM: si-web
+      IMAGE_TAG: ${{ inputs.image_tag || github.sha }}
+      RELEASE_PATHS: docker-compose.yml docker-compose.external.yml docker deploy
+    steps:
+      - name: Demo freeze
+        env:
+          FREEZE_AT: ${{ vars.DEMO_FREEZE_AT }}
+          OVERRIDE: ${{ inputs.freeze_override }}
+        run: |
+          if [[ -n "$FREEZE_AT" && "$(date -u +%s)" -ge "$(date -u -d "$FREEZE_AT" +%s)" && "$OVERRIDE" != true ]]; then
+            echo "::error::Demo freeze started at $FREEZE_AT; re-run with freeze_override to deploy anyway."
+            exit 1
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.IMAGE_TAG }}
+          persist-credentials: false
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          project_id: ${{ vars.GCP_PROJECT }}
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_CI_SA }}
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - name: Pin image digests into release.env
+        run: |
+          for i in media backend publisher web; do
+            digest=$(gcloud artifacts docker images describe "$AR_REPO/sportlight-$i:$IMAGE_TAG" \
+              --format='value(image_summary.digest)')
+            echo "IMAGE_SPORTLIGHT_${i^^}=$AR_REPO/sportlight-$i@$digest"
+          done > release.env
+          cat release.env
+          tar -czf release.tgz release.env $RELEASE_PATHS
+
+      - name: Copy release to si-web
+        run: |
+          gcloud compute scp release.tgz "$VM:/tmp/release-$IMAGE_TAG.tgz" --zone="$ZONE" --tunnel-through-iap --quiet
+
+      - name: Start release
+        run: |
+          gcloud compute ssh "$VM" --zone="$ZONE" --tunnel-through-iap --quiet --command="
+            set -euo pipefail
+            d=/opt/sportlight-web/releases/$IMAGE_TAG
+            sudo rm -rf \$d && sudo mkdir -p \$d
+            sudo tar -xzf /tmp/release-$IMAGE_TAG.tgz -C \$d && rm -f /tmp/release-$IMAGE_TAG.tgz
+            cd \$d && sudo bash deploy/remote-up.sh
+            sudo ln -sfn \$d /opt/sportlight-web/current"
+
+      - name: Health check
+        run: |
+          gcloud compute ssh "$VM" --zone="$ZONE" --tunnel-through-iap --quiet --command='
+            cd /opt/sportlight-web/current
+            for i in $(seq 1 30); do sudo bash deploy/remote-health.sh 2>/dev/null && { echo healthy; exit 0; }; sleep 10; done
+            echo "not healthy after 5 minutes"; exit 1'
+
+      - name: Logs on failure
+        if: failure()
+        run: |
+          gcloud compute ssh "$VM" --zone="$ZONE" --tunnel-through-iap --quiet \
+            --command='cd /opt/sportlight-web/current && sudo bash deploy/remote-logs.sh' || true
+
+      - name: Summary
+        run: |
+          {
+            echo "### Deployed \`$IMAGE_TAG\` to $VM"
+            sed 's/^/- /' release.env
+          } >> "$GITHUB_STEP_SUMMARY"
