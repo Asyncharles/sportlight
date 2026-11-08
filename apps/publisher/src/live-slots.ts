@@ -14,9 +14,31 @@ export interface LivePlanInput {
   /** Maximum concurrent live feeds; 0 or less means unlimited. */
   max: number;
   rotateMs: number;
+  /** Feeds that are always live when wanted. They take slots first and are never rotated out. */
+  pinned?: ReadonlySet<string>;
 }
 
-export function planLive({ wanted, running, lastEndedMs, now, max, rotateMs }: LivePlanInput) {
+export function planLive(input: LivePlanInput): { start: string[]; stop: string[] } {
+  const pinned = input.pinned;
+  if (!pinned?.size) return planRotating(input);
+  const { wanted, running, max } = input;
+  const pinnedWanted = wanted.filter((id) => pinned.has(id));
+  const start = pinnedWanted.filter((id) => !running.has(id));
+  const stop = [...running.keys()].filter((id) => pinned.has(id) && !pinnedWanted.includes(id));
+  const others = {
+    ...input,
+    wanted: wanted.filter((id) => !pinned.has(id)),
+    running: new Map([...running].filter(([id]) => !pinned.has(id))),
+  };
+  if (max > 0 && max - pinnedWanted.length <= 0) {
+    // Pinned feeds fill every slot: nothing else stays on air.
+    return { start, stop: [...stop, ...others.running.keys()] };
+  }
+  const rest = planRotating({ ...others, max: max > 0 ? max - pinnedWanted.length : 0 });
+  return { start: [...start, ...rest.start], stop: [...stop, ...rest.stop] };
+}
+
+function planRotating({ wanted, running, lastEndedMs, now, max, rotateMs }: LivePlanInput) {
   const wantedSet = new Set(wanted);
   const stop = [...running.keys()].filter((id) => !wantedSet.has(id));
   const keep = [...running.entries()].filter(([id]) => wantedSet.has(id)).sort((a, b) => a[1] - b[1]);

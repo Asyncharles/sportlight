@@ -35,6 +35,24 @@ npm run dev                         # shared (watch) + backend + publisher + Vit
 
 Other scripts: `npm test` (Vitest), `npm run typecheck`, `npm run build`.
 
+### Engine demo feeds (football, F1, NBA, weightlifting)
+
+The four SportlightEngine demo clips (`media/local-sources.json`) play as feeds whose ids are the engine's `feed_id`s from `config/feeds.yaml`. The footage is private broadcast video, so it is never copied into the repo, an image or anything public. `npm run media:local` only writes posters, thumbnails and `media/dist/local/catalog.json`, and the media server serves the MP4s straight from the footage folder, byte for byte the files the engine's pushers loop.
+
+```bash
+npm run media:local -- --from=C:/footage/clips      # or the VM's data/samples
+LOCAL_FOOTAGE_DIR=C:/footage/clips npm run dev       # Vite serves the clips at /media/local/videos
+```
+
+In Docker, add the overlay: `LOCAL_FOOTAGE_DIR=... docker compose -f docker-compose.yml -f docker-compose.local-feeds.yml up --build`. Don't combine it with the public GCP deploy.
+
+**Shared clock.** The engine's clock is `t_video`, the position in the looping MP4: `(now − pusher start) mod duration`. Sportlight plays the same file at the same position. The publisher sets each run's `mediaOffsetSec` so the browser's live position equals the engine's, and it sends `feed.updated` with a new offset if the clock moves. Runs still start at "now", because the backend ignores runs that start earlier than the one it has. Each feed's clock start comes from:
+
+1. `FEEDS_STATE`, the URL or path of the pushers' `run/feeds_state.json` (authoritative). Each feed's start time is read from `started_at`, `start_time` or `pusher_start`, as epoch seconds, epoch milliseconds or ISO. The file can be `{ "feeds": { "<feed_id>": { ... } } }` or `{ "feeds": [ { "feed_id": ..., ... } ] }`.
+2. Otherwise the engine's scores (`ENGINE_SCORES_URL`, e.g. `ws://localhost:8000/ws/scores`): clock start = `t_emit_ns − (loop_epoch × duration + t_video)`.
+
+With `ENGINE_SCORES_URL` set, each `ScoreUpdate` becomes a `feed.intensity` (score `intensity_pct`, `streamTime` mapped from `t_video`), so highlights land on the right moment. Without it, these feeds get a simulated signal. These feeds are pinned: always live, never rotated out by `MAX_LIVE_FEEDS`. `FEED_SET=local` hides every other demo and test feed.
+
 ## Architecture
 
 ```

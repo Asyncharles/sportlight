@@ -1,0 +1,54 @@
+{
+  "comment": "Engine demo feeds played from local footage (npm run media:local). ids are the engine's feed_id in SportlightEngine/config/feeds.yaml; file is the sample's file name. The footage is private broadcast video: it is never copied into the repo, Docker images or anything public.",
+  "thumbnailIntervalSec": 10,
+  "clips": [
+    {
+      "id": "fb-arg-fra",
+      "file": "fb_arg_fra_2022.mp4",
+      "sportId": "football",
+      "competitionId": "fifa-world-cup",
+      "event": {
+        "title": "Argentina v France",
+        "subtitle": "2022 FIFA World Cup · Final",
+        "broadcaster": { "name": "FIFA", "channel": "YouTube replay" }
+      },
+      "sourceUrl": "https://www.youtube.com/watch?v=RgqKdplLIk4"
+    },
+    {
+      "id": "f1-demo-race",
+      "file": "f1_2019_brazilian_gp.mp4",
+      "sportId": "motorsport",
+      "competitionId": "formula-1",
+      "event": {
+        "title": "Brazilian Grand Prix",
+        "subtitle": "Formula 1 2019 · Lap 45 to the flag",
+        "broadcaster": { "name": "Sky Sports", "channel": "Sky Sports F1" }
+      },
+      "sourceUrl": "https://www.youtube.com/watch?v=-3EHB0IqOnw"
+    },
+    {
+      "id": "nba-demo-game",
+      "file": "nba_20160619_cle_gsw.mp4",
+      "sportId": "basketball",
+      "competitionId": "nba",
+      "event": {
+        "title": "Cavaliers @ Warriors",
+        "subtitle": "2016 NBA Finals · Game 7",
+        "broadcaster": { "name": "ESPN", "channel": "YouTube replay" }
+      },
+      "sourceUrl": "https://www.youtube.com/watch?v=EoVTttvKfRs"
+    },
+    {
+      "id": "wl-demo-session",
+      "file": "wl_worlds2025_m79.mp4",
+      "sportId": "weightlifting",
+      "competitionId": "iwf-worlds",
+      "event": {
+        "title": "Men's 79 kg, Group A",
+        "subtitle": "2025 World Weightlifting Championships · Førde",
+        "broadcaster": { "name": "Weightlifting House", "channel": "YouTube replay" }
+      },
+      "sourceUrl": "https://www.youtube.com/watch?v=2JRPzQ7QYgY"
+    }
+  ]
+}

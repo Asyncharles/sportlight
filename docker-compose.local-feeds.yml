@@ -1,0 +1,25 @@
+# Opt-in overlay: the engine's demo feeds (football, F1, NBA, weightlifting) from local footage.
+#   npm run media:local -- --from=<footage dir>     # posters, thumbnails, catalog (no video copied)
+#   LOCAL_FOOTAGE_DIR=<footage dir> docker compose -f docker-compose.yml -f docker-compose.local-feeds.yml up --build
+#
+# The footage is private broadcast video. It is mounted read-only at run time, never built into an
+# image. Do not use this overlay with deploy/compose.gcp.yml unless the site is closed to the public.
+#
+# Shared clock with SportlightEngine (optional; see README "Engine demo feeds"):
+#   ENGINE_SCORES_URL=ws://host.docker.internal:8000/ws/scores   engine scores replace simulated intensity
+#   FEEDS_STATE=<URL or path of run/feeds_state.json>              pusher start times (authoritative)
+#   FEED_SET=local                                                 hide the other demo and test feeds
+services:
+  media:
+    volumes:
+      - ./media/dist/local:/usr/share/nginx/media/local:ro
+      - ${LOCAL_FOOTAGE_DIR:?Set LOCAL_FOOTAGE_DIR to the folder with the demo MP4s}:/usr/share/nginx/media/local/videos:ro
+
+  publisher:
+    environment:
+      MEDIA_LOCAL_CATALOG: http://media:8080/local/catalog.json
+      FEED_SET: ${FEED_SET:-all}
+      ENGINE_SCORES_URL: ${ENGINE_SCORES_URL:-}
+      FEEDS_STATE: ${FEEDS_STATE:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

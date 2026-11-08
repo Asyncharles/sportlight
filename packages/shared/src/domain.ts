@@ -22,7 +22,8 @@ export type SportIconName =
   | 'rugby-ball'
   | 'chess-knight'
   | 'gamepad-2'
-  | 'footprints';
+  | 'footprints'
+  | 'dumbbell';
 
 export interface Sport {
   id: SportId;

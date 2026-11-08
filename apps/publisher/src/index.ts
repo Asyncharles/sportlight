@@ -6,12 +6,16 @@ import {
   FEED_EVENT_SCHEMA_VERSION,
   routingKeyFor,
   type AnyFeedEvent,
+  loopDelta,
   type LoopingMp4Source,
   type MediaCredit,
 } from '@sportlight/shared';
 import { DEMO_FEEDS, inWindows, intensityAt, type DemoFeed } from './scenario.js';
 import { openDatasetFeeds } from './open-dataset.js';
 import { planLive } from './live-slots.js';
+import { FeedClocks, offsetFor, parseFeedsState, streamTimeFor } from './feed-clock.js';
+import { followEngineScores, scoreTimeMs, type EngineScore } from './engine-scores.js';
+import { LOCAL_DATASET, localFeeds } from './local-feeds.js';
 
 /**
  * Mock feed provider. Publishes the demo scenario to RabbitMQ exactly as a real provider adapter
@@ -24,6 +28,14 @@ const config = {
   amqpUrl: env.AMQP_URL ?? 'amqp://guest:guest@localhost:5672',
   /** URL or file path of the media catalog produced by media/build.mjs. */
   catalog: env.MEDIA_CATALOG ?? '../../media/dist/catalog.json',
+  /** URL or file path of the engine demo feeds' catalog (npm run media:local); optional. */
+  localCatalog: env.MEDIA_LOCAL_CATALOG ?? '../../media/dist/local/catalog.json',
+  /** all: demo scenario, open test clips and local engine feeds. local: only the local engine feeds. */
+  feedSet: env.FEED_SET === 'local' ? 'local' : 'all',
+  /** SportlightEngine's score stream, e.g. ws://localhost:8000/ws/scores. Unset: simulated intensity. */
+  engineScoresUrl: env.ENGINE_SCORES_URL ?? '',
+  /** URL or file path of the engine pushers' run/feeds_state.json (each feed's start time). */
+  feedsState: env.FEEDS_STATE ?? '',
   /** Base URL browsers use to fetch media (origin-relative by default). */
   mediaPublicBase: (env.MEDIA_PUBLIC_BASE ?? '/media').replace(/\/$/, ''),
   provider: env.PROVIDER_ID ?? 'mock-provider',
@@ -64,21 +76,36 @@ export interface CatalogClip {
   durationSec: number;
   hasAudio: boolean;
   startOffsetSec?: number;
+  competitionId?: string;
   event?: { title: string; subtitle: string; broadcaster: DemoFeed['broadcaster'] };
   thumbnails: { template: string; intervalSec: number; count: number };
+}
+
+async function readSource(location: string): Promise<string> {
+  return /^https?:\/\//.test(location)
+    ? await fetch(location).then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.text();
+      })
+    : await readFile(new URL(location, `file://${process.cwd()}/`), 'utf8');
+}
+
+/** The local engine feeds' catalog is optional: missing means no local feeds. */
+async function loadLocalCatalog(): Promise<CatalogClip[]> {
+  try {
+    return (JSON.parse(await readSource(config.localCatalog)) as { clips: CatalogClip[] }).clips;
+  } catch {
+    return [];
+  }
 }
 
 async function loadCatalog(): Promise<Map<string, CatalogClip>> {
   for (let attempt = 0; ; attempt++) {
     try {
-      const raw = /^https?:\/\//.test(config.catalog)
-        ? await fetch(config.catalog).then((r) => {
-            if (!r.ok) throw new Error(`HTTP ${r.status}`);
-            return r.text();
-          })
-        : await readFile(new URL(config.catalog, `file://${process.cwd()}/`), 'utf8');
-      const clips = (JSON.parse(raw) as { clips: CatalogClip[] }).clips;
-      return new Map(clips.map((c) => [c.id, c]));
+      const local = await loadLocalCatalog();
+      const clips =
+        config.feedSet === 'local' ? [] : (JSON.parse(await readSource(config.catalog)) as { clips: CatalogClip[] }).clips;
+      return new Map([...clips, ...local].map((c) => [c.id, c]));
     } catch (err) {
       const delay = Math.min(10_000, 1000 * 2 ** attempt);
       log('media catalog unavailable, retrying', { catalog: config.catalog, err: (err as Error).message, inMs: delay });
@@ -87,14 +114,19 @@ async function loadCatalog(): Promise<Map<string, CatalogClip>> {
   }
 }
 
-function sourceFor(clip: CatalogClip): LoopingMp4Source {
+function sourceFor(clip: CatalogClip, runStartMs: number): LoopingMp4Source {
   const base = config.mediaPublicBase;
+  const clockStart = clocks.startFor(clip.id);
   return {
     kind: 'looping-mp4',
     url: `${base}/${clip.video}`,
     durationSec: clip.durationSec,
-    // Begin inside the broadcast instead of randomly landing in an interval or credits.
-    mediaOffsetSec: Math.min(clip.startOffsetSec ?? 0, Math.max(0, clip.durationSec - 1)),
+    // Engine feeds play where the engine is (shared clock); others begin inside the broadcast instead
+    // of randomly landing in an interval or credits.
+    mediaOffsetSec:
+      clockStart !== undefined
+        ? offsetFor(runStartMs, clockStart, clip.durationSec)
+        : Math.min(clip.startOffsetSec ?? 0, Math.max(0, clip.durationSec - 1)),
     hasAudio: clip.hasAudio,
     credits: clip.credits,
     attributionNotice: clip.attributionNotice,
@@ -208,7 +240,11 @@ interface Run {
 }
 
 const runs = new Map<string, Run>();
-const activeFeeds: DemoFeed[] = [...DEMO_FEEDS];
+const activeFeeds: DemoFeed[] = config.feedSet === 'local' ? [] : [...DEMO_FEEDS];
+const clocks = new FeedClocks();
+/** Engine scores replace simulated intensity for local feeds while the engine is configured. */
+const engineDriven = (feedId: string, catalog: Map<string, CatalogClip>) =>
+  Boolean(config.engineScoresUrl) && catalog.get(feedId)?.dataset === LOCAL_DATASET;
 
 function envelope<T extends AnyFeedEvent['type']>(
   feed: DemoFeed,
@@ -263,6 +299,7 @@ function step(catalog: Map<string, CatalogClip>, processStart: number) {
     now,
     max: config.maxLiveFeeds,
     rotateMs: config.liveRotateSec * 1000,
+    pinned: new Set(activeFeeds.filter((feed) => feed.pinned).map((feed) => feed.id)),
   });
   for (const id of plan.stop) {
     const feed = byId.get(id)!;
@@ -277,7 +314,7 @@ function step(catalog: Map<string, CatalogClip>, processStart: number) {
       runId: `${feed.id}.${now.toString(36)}`,
       startedAtMs: now,
       seq: 0,
-      source: sourceFor(catalog.get(feed.clipId)!),
+      source: sourceFor(catalog.get(feed.clipId)!, now),
       unavailable: false,
       lastAnnounceMs: 0,
     };
@@ -299,14 +336,49 @@ function step(catalog: Map<string, CatalogClip>, processStart: number) {
       );
       log(unavailable ? 'feed unavailable' : 'feed available again', { feedId: feed.id });
     }
+    syncClock(feed, run, catalog.get(feed.clipId)!);
     if (now - run.lastAnnounceMs >= config.reannounceSec * 1000) announce(feed, run, now);
     if (run.unavailable) continue; // an outage also silences intensity
+    if (engineDriven(feed.id, catalog)) continue; // intensity comes from the engine's scores
 
     const streamTime = Math.round(((now - run.startedAtMs) / 1000) * 1000) / 1000;
     publish(
       envelope(feed, run, 'feed.intensity', { score: intensityAt(feed, t, config.seed), streamTime }),
       feed.sportId,
     );
+  }
+}
+
+/** Moves a running feed's media offset when its shared clock changed (pusher restart, engine anchor). */
+function syncClock(feed: DemoFeed, run: Run, clip: CatalogClip) {
+  const clockStart = clocks.startFor(clip.id);
+  if (clockStart === undefined) return;
+  const offset = offsetFor(run.startedAtMs, clockStart, clip.durationSec);
+  if (Math.abs(loopDelta(run.source.mediaOffsetSec, offset, clip.durationSec)) < 0.25) return;
+  run.source = { ...run.source, mediaOffsetSec: offset };
+  publish(envelope(feed, run, 'feed.updated', { source: run.source }), feed.sportId);
+  log('feed clock synced', { feedId: feed.id, from: clocks.sourceOf(clip.id), mediaOffsetSec: offset });
+}
+
+function onEngineScore(score: EngineScore, receivedAtMs: number, catalog: Map<string, CatalogClip>) {
+  const clip = catalog.get(score.feed_id);
+  const feed = activeFeeds.find((f) => f.id === score.feed_id);
+  if (!clip || clip.dataset !== LOCAL_DATASET || !feed) return;
+  clocks.noteScore(score.feed_id, score.t_video, score.loop_epoch, clip.durationSec, scoreTimeMs(score, receivedAtMs));
+  const run = runs.get(score.feed_id);
+  if (!run || run.unavailable || score.stale) return;
+  syncClock(feed, run, clip);
+  const streamTime = streamTimeFor(score, clocks.startFor(clip.id)!, run.startedAtMs, clip.durationSec);
+  if (streamTime < 0) return; // a moment from before this run started
+  publish(envelope(feed, run, 'feed.intensity', { score: Math.round(score.intensity_pct), streamTime }), feed.sportId);
+}
+
+async function refreshFeedsState() {
+  if (!config.feedsState) return;
+  try {
+    clocks.setPusherStarts(parseFeedsState(JSON.parse(await readSource(config.feedsState))));
+  } catch (err) {
+    log('feeds_state unavailable', { feedsState: config.feedsState, err: (err as Error).message });
   }
 }
 
@@ -334,8 +406,19 @@ async function main() {
       delete feed.competitionId;
     }
   }
+  activeFeeds.push(...localFeeds([...catalog.values()]));
   const missing = activeFeeds.filter((f) => !catalog.has(f.clipId)).map((f) => f.id);
   if (missing.length) log('feeds without media are skipped', { missing });
+  await refreshFeedsState();
+  const feedsStateTimer = setInterval(() => void refreshFeedsState(), 5_000);
+  const stopEngine = config.engineScoresUrl
+    ? followEngineScores(config.engineScoresUrl, (score, at) => onEngineScore(score, at, catalog), log)
+    : () => {};
+  log('feed clock', {
+    feedsState: config.feedsState || null,
+    engineScores: config.engineScoresUrl || null,
+    localFeeds: activeFeeds.filter((f) => f.pinned).map((f) => f.id),
+  });
   await connect();
 
   const processStart = Date.now();
@@ -349,7 +432,10 @@ async function main() {
       .then((next) => {
         if (stopping) return;
         const known = new Set(activeFeeds.map((feed) => feed.id));
-        const added = openDatasetFeeds([...next.values()]).filter((feed) => !known.has(feed.id));
+        const added = [
+          ...(config.feedSet === 'local' ? [] : openDatasetFeeds([...next.values()])),
+          ...localFeeds([...next.values()]),
+        ].filter((feed) => !known.has(feed.id));
         activeFeeds.push(...added);
         catalog = next;
         if (added.length) log('new test media activated', { added: added.length, clips: catalog.size });
@@ -364,6 +450,8 @@ async function main() {
     stopping = true;
     clearInterval(timer);
     clearInterval(catalogTimer);
+    clearInterval(feedsStateTimer);
+    stopEngine();
     log('shutting down: ending all feeds');
     for (const feed of activeFeeds) {
       const run = runs.get(feed.id);

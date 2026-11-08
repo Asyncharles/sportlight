@@ -46,6 +46,8 @@ export interface DemoFeed {
   /** Amplitude of the slow noise term. */
   volatility: number;
   peaks: Peak[];
+  /** Always live: never rotated out or held back by the live-feed cap (the engine's demo feeds). */
+  pinned?: boolean;
 }
 
 export const DEMO_FEEDS: DemoFeed[] = [

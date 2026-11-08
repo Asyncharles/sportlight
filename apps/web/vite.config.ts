@@ -1,5 +1,5 @@
 import { createReadStream, existsSync, statSync } from 'node:fs';
-import { extname, join, normalize, resolve } from 'node:path';
+import { extname, join, normalize, resolve, sep } from 'node:path';
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -11,15 +11,19 @@ const backend = process.env.BACKEND_URL ?? 'http://localhost:4000';
  * the nginx media service does in Docker.
  */
 function devMedia(): Plugin {
-  const root = join(repoRoot, 'media/dist');
+  const dist = join(repoRoot, 'media/dist');
+  // Engine demo footage is served straight from its own folder (npm run media:local), never copied.
+  const footage = process.env.LOCAL_FOOTAGE_DIR ? resolve(process.env.LOCAL_FOOTAGE_DIR) : null;
   const types: Record<string, string> = { '.mp4': 'video/mp4', '.jpg': 'image/jpeg', '.json': 'application/json', '.md': 'text/markdown' };
   return {
     name: 'sportlight-dev-media',
     configureServer(server) {
       server.middlewares.use('/media', (req, res, next) => {
         const path = normalize(decodeURIComponent((req.url ?? '/').split('?')[0]!)).replace(/^(\.\.[/\\])+/, '');
-        const file = join(root, path);
-        if (!file.startsWith(root) || !existsSync(file) || !statSync(file).isFile()) return next();
+        const local = footage && /^[/\\]local[/\\]videos[/\\]/.test(path);
+        const root = local ? footage : dist;
+        const file = join(root, local ? path.replace(/^[/\\]local[/\\]videos/, '') : path);
+        if (!file.startsWith(root + sep) || !existsSync(file) || !statSync(file).isFile()) return next();
         const size = statSync(file).size;
         const type = types[extname(file)] ?? 'application/octet-stream';
         const range = /bytes=(\d*)-(\d*)/.exec(req.headers.range ?? '');
