@@ -25,14 +25,14 @@ jobs:
       - run: npm test
       - run: npm run typecheck
       - run: npm run build
-      - name: Compose files parse (dummy values; nothing secret here)
+            - name: Compose files parse (dummy values; nothing secret here)
         env:
           AMQP_URL: amqp://ci:ci@broker.invalid:5672/ci
           PUBLIC_HOST: ci.invalid
-          IMAGE_SPORTLIGHT_MEDIA: ci.invalid/sportlight-media:ci
-          IMAGE_SPORTLIGHT_BACKEND: ci.invalid/sportlight-backend:ci
-          IMAGE_SPORTLIGHT_PUBLISHER: ci.invalid/sportlight-publisher:ci
-          IMAGE_SPORTLIGHT_WEB: ci.invalid/sportlight-web:ci
+          IMAGE_SPORTLIGHT_MEDIA: ci/media:0
+          IMAGE_SPORTLIGHT_BACKEND: ci/backend:0
+          IMAGE_SPORTLIGHT_PUBLISHER: ci/publisher:0
+          IMAGE_SPORTLIGHT_WEB: ci/web:0
         run: |
           docker compose -f docker-compose.yml -f docker-compose.external.yml config --quiet
           docker compose -f docker-compose.yml -f docker-compose.external.yml -f deploy/compose.gcp.yml config --quiet
