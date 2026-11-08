@@ -252,7 +252,10 @@ def ingest(c):
             raise RuntimeError('This source needs yt-dlp[default]; set YT_DLP or install yt-dlp')
         info_file = CACHE / (id + '.primary.json')
         source = CACHE / (id + '.mp4')
-        common = [downloader, '--ignore-config', '--no-playlist', '--js-runtimes', 'node', '--remote-components', 'ejs:github', '--socket-timeout', '30', '--retries', '3', '--fragment-retries', '3']
+        node = os.environ.get('MEDIA_NODE') or ('/opt/homebrew/bin/node' if Path('/opt/homebrew/bin/node').exists() else shutil.which('node'))
+        if not node or int(run([node, '--version']).strip().lstrip('v').split('.')[0]) < 22:
+            raise ValueError('YouTube sources need Node >=22 for yt-dlp; set MEDIA_NODE to a supported executable')
+        common = [downloader, '--ignore-config', '--no-playlist', '--js-runtimes', f'node:{node}', '--remote-components', 'ejs:github', '--socket-timeout', '30', '--retries', '3', '--fragment-retries', '3']
         with YOUTUBE_SLOTS:
             info = json.loads(info_file.read_text()) if info_file.exists() else json.loads(run([*common, '--skip-download', '--dump-single-json', c['youtubeSource']]))
             validate_primary(c, info)

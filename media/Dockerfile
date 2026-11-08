@@ -2,7 +2,7 @@
 # Demo media origin. Build context: ./media
 # Builds (or reuses, if media/dist is present in the context) the transcoded demo library, then
 # serves it with nginx. Downloads the checked-in open sports collection on first build.
-FROM node:20.18-alpine AS build
+FROM node:24-alpine AS build
 RUN apk add --no-cache ffmpeg python3 py3-pip
 RUN python3 -m venv /opt/yt-dlp && /opt/yt-dlp/bin/pip install --no-cache-dir "yt-dlp[default]"
 ENV YT_DLP=/opt/yt-dlp/bin/yt-dlp

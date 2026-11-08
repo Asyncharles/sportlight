@@ -1276,7 +1276,8 @@
         }
       },
       "primaryFetchIssue": "Command '['/Users/morgandaniel/Documents/sportlight/media/.tools/bin/yt-dlp', '--ignore-config', '--no-playlist', '--js-runtimes', 'node', '--remote-components', 'ejs:github', '--socket-timeout', '30', '--retries', '3', '--fragment-retries', '3', '--skip-download', '--dump-single-json', 'https://www.youtube.com/watch?v=WN8-I2kJeVA']' returned non-zero exit status 1.",
-      "rejectedPrimarySource": "https://www.youtube.com/watch?v=WN8-I2kJeVA"
+      "rejectedPrimarySource": "https://www.youtube.com/watch?v=WN8-I2kJeVA",
+      "youtubeSource": "https://www.youtube.com/watch?v=WN8-I2kJeVA"
     },
     {
       "id": "open-athletics-25328970",
@@ -1376,7 +1377,8 @@
         }
       },
       "primaryFetchIssue": "Command '['/Users/morgandaniel/Documents/sportlight/media/.tools/bin/yt-dlp', '--ignore-config', '--no-playlist', '--js-runtimes', 'node', '--remote-components', 'ejs:github', '--socket-timeout', '30', '--retries', '3', '--fragment-retries', '3', '--skip-download', '--dump-single-json', 'https://www.youtube.com/watch?v=bqPng9tDw5s']' returned non-zero exit status 1.",
-      "rejectedPrimarySource": "https://www.youtube.com/watch?v=bqPng9tDw5s"
+      "rejectedPrimarySource": "https://www.youtube.com/watch?v=bqPng9tDw5s",
+      "youtubeSource": "https://www.youtube.com/watch?v=bqPng9tDw5s"
     },
     {
       "id": "open-tennis-63443983",
@@ -1873,7 +1875,8 @@
         }
       },
       "primaryFetchIssue": "Command '['/Users/morgandaniel/Documents/sportlight/media/.tools/bin/yt-dlp', '--ignore-config', '--no-playlist', '--js-runtimes', 'node', '--remote-components', 'ejs:github', '--socket-timeout', '30', '--retries', '3', '--fragment-retries', '3', '--skip-download', '--dump-single-json', 'https://www.youtube.com/watch?v=Fh2PwbTWH_g']' returned non-zero exit status 1.",
-      "rejectedPrimarySource": "https://www.youtube.com/watch?v=Fh2PwbTWH_g"
+      "rejectedPrimarySource": "https://www.youtube.com/watch?v=Fh2PwbTWH_g",
+      "youtubeSource": "https://www.youtube.com/watch?v=Fh2PwbTWH_g"
     },
     {
       "id": "open-motorsport-147714026",
@@ -2072,7 +2075,8 @@
         }
       },
       "primaryFetchIssue": "Command '['/Users/morgandaniel/Documents/sportlight/media/.tools/bin/yt-dlp', '--ignore-config', '--no-playlist', '--js-runtimes', 'node', '--remote-components', 'ejs:github', '--socket-timeout', '30', '--retries', '3', '--fragment-retries', '3', '--skip-download', '--dump-single-json', 'https://www.youtube.com/watch?v=slst7LFSfBU']' returned non-zero exit status 1.",
-      "rejectedPrimarySource": "https://www.youtube.com/watch?v=slst7LFSfBU"
+      "rejectedPrimarySource": "https://www.youtube.com/watch?v=slst7LFSfBU",
+      "youtubeSource": "https://www.youtube.com/watch?v=slst7LFSfBU"
     },
     {
       "id": "open-football-133217412",
@@ -2360,7 +2364,8 @@
         }
       },
       "primaryFetchIssue": "Command '['/Users/morgandaniel/Documents/sportlight/media/.tools/bin/yt-dlp', '--ignore-config', '--no-playlist', '--js-runtimes', 'node', '--remote-components', 'ejs:github', '--socket-timeout', '30', '--retries', '3', '--fragment-retries', '3', '--skip-download', '--dump-single-json', 'https://www.youtube.com/watch?v=nog7ZEONM7I']' returned non-zero exit status 1.",
-      "rejectedPrimarySource": "https://www.youtube.com/watch?v=nog7ZEONM7I"
+      "rejectedPrimarySource": "https://www.youtube.com/watch?v=nog7ZEONM7I",
+      "youtubeSource": "https://www.youtube.com/watch?v=nog7ZEONM7I"
     },
     {
       "id": "open-motorsport-116421328",
