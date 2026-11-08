@@ -1,0 +1,38 @@
+# VM overlay, layered after docker-compose.yml and docker-compose.external.yml.
+# Runs the digest-pinned images from release.env (no builds), keeps /data in a named
+# volume that outlives release directories, closes the PoC host ports, and puts Caddy
+# in front for HTTPS (automatic Let's Encrypt, HTTP->HTTPS redirect, WebSockets).
+# Needs Docker Compose >= 2.24 for !reset.
+services:
+  media:
+    image: ${IMAGE_SPORTLIGHT_MEDIA}
+    build: !reset null
+    ports: !reset []
+    restart: unless-stopped
+  backend:
+    image: ${IMAGE_SPORTLIGHT_BACKEND}
+    build: !reset null
+    ports: !reset []
+    volumes:
+      - data:/data          # same target as the base file, so this entry replaces it
+  publisher:
+    image: ${IMAGE_SPORTLIGHT_PUBLISHER}
+    build: !reset null
+    ports: !reset []
+  web:
+    image: ${IMAGE_SPORTLIGHT_WEB}
+    build: !reset null
+    ports: !reset []
+    restart: unless-stopped
+  caddy:
+    image: caddy:2.11.8     # check Docker Hub for the current exact 2.x tag before merging
+    command: caddy reverse-proxy --from ${PUBLIC_HOST} --to web:8080
+    ports: ["80:80", "443:443"]
+    volumes:
+      - caddy_data:/data    # certificates; keeps you clear of Let's Encrypt rate limits
+    depends_on: [web]
+    restart: unless-stopped
+
+volumes:
+  data: {}
+  caddy_data: {}
