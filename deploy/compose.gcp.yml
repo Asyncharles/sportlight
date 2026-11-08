@@ -3,11 +3,18 @@
 # volume that outlives release directories, closes the PoC host ports, and puts Caddy
 # in front for HTTPS (automatic Let's Encrypt, HTTP->HTTPS redirect, WebSockets).
 # Needs Docker Compose >= 2.24 for !reset.
+#
+# Engine feeds: SportlightEngine publishes the four demo feeds' FeedEvents to RabbitMQ, so the mock
+# publisher sits behind the `mock` profile here (deploy/remote-up.sh starts it only with MOCK_PUBLISHER=1;
+# local development is unchanged). The demo clips are synced from the private bucket into
+# /opt/sportlight-web/footage at deploy time and mounted read-only; they are never in an image.
 services:
   media:
     image: ${IMAGE_SPORTLIGHT_MEDIA}
     build: !reset null
     ports: !reset []
+    volumes:
+      - /opt/sportlight-web/footage:/usr/share/nginx/media/local/videos:ro
     restart: unless-stopped
   backend:
     image: ${IMAGE_SPORTLIGHT_BACKEND}
@@ -19,6 +26,7 @@ services:
     image: ${IMAGE_SPORTLIGHT_PUBLISHER}
     build: !reset null
     ports: !reset []
+    profiles: ["mock"]
   web:
     image: ${IMAGE_SPORTLIGHT_WEB}
     build: !reset null
