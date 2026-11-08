@@ -21,6 +21,8 @@ services:
   media:
     build:
       context: ./media
+      args:
+        MEDIA_CONTACT: ${MEDIA_CONTACT:-}
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/catalog.json"]
       interval: 5s

@@ -8,8 +8,11 @@ import { loadConfig } from '../config.js';
 import { createLogger } from '../logger.js';
 import { ContentStore, overlaps, publicJob, seal, unseal } from './store.js';
 import { googleFetch, GoogleError, uploadMetadata, resumeUpload } from './google.js';
-import { sourceUrl } from './renderer.js';
-import { ContentService } from './service.js';
+import { shortFilter, sourceUrl } from './renderer.js';
+import { timedCues } from './overlays.js';
+import { alignCues, speechSegments } from './speech.js';
+import { dtwPreset, tokensToWords, wordsToCues } from './transcribe.js';
+import { ContentService, isQuotaError, nextPacificMidnight } from './service.js';
 
 const directories: string[] = [];
 afterEach(async () => {
@@ -141,6 +144,69 @@ describe('publishing safety and persistence', () => {
     expect(svc.store.state.jobs).toHaveLength(2);
     await svc.stop();
   });
+  it('skips clips still queued for a previously connected channel', async () => {
+    const svc = await service([highlight()]);
+    svc.store.state.connection = {
+      id: 'channel',
+      title: 'Test',
+      email: 'owner@example.com',
+      name: 'Owner',
+      refreshToken: 'encrypted',
+    };
+    svc.store.state.seen = [highlight().id];
+    svc.store.state.jobs.push({
+      id: 'old',
+      highlight: highlight(),
+      channelId: 'previous',
+      status: 'queued',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      readyAt: Date.now(),
+      attempts: 0,
+      rendered: false,
+    });
+    await svc.tick();
+    expect(svc.store.state.jobs[0]?.status).toBe('skipped');
+    expect(svc.store.state.jobs[0]?.message).toMatch(/different channel/);
+    await svc.stop();
+  });
+  it('reports the active job, or the next job and when its upload slot opens', async () => {
+    const svc = await service([]);
+    svc.store.state.connection = {
+      id: 'channel',
+      title: 'Test',
+      email: 'owner@example.com',
+      name: 'Owner',
+      refreshToken: 'encrypted',
+    };
+    const now = Date.now();
+    const job = (id: string, extra: object) => ({
+      id,
+      highlight: highlight(id),
+      channelId: 'channel',
+      createdAt: now,
+      updatedAt: now,
+      readyAt: now - 1000,
+      attempts: 0,
+      rendered: false,
+      ...extra,
+    });
+    svc.store.state.jobs.push(
+      job('done', { status: 'published', uploadStartedAt: now - 5 * 60_000 }) as never,
+      job('next', { status: 'queued' }) as never,
+    );
+    expect(svc.schedule(now)).toEqual({
+      state: 'waiting',
+      jobId: 'next',
+      reason: 'interval',
+      nextAt: now + 10 * 60_000,
+    });
+    svc.store.state.jobs[1]!.status = 'rendering';
+    expect(svc.schedule(now)).toEqual({ state: 'working', jobId: 'next' });
+    svc.store.state.jobs[1]!.status = 'skipped';
+    expect(svc.schedule(now)).toEqual({ state: 'idle' });
+    await svc.stop();
+  });
   it('does not create jobs for the archive recorded at connection', async () => {
     const svc = await service([highlight()]);
     svc.store.state.connection = {
@@ -269,7 +335,7 @@ describe('publishing safety and persistence', () => {
           })
         ).status,
       ).toBe(403);
-      const settings = { enabled: true, minPeak: 90, dailyLimit: 5, intervalMinutes: 0 };
+      const settings = { enabled: true, minPeak: 90, dailyLimit: 0, intervalMinutes: 0 };
       expect(
         (
           await fetch(`${base}/api/content/settings`, {
@@ -311,5 +377,130 @@ describe('publishing safety and persistence', () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
       await svc.stop();
     }
+  });
+});
+
+describe('premium Shorts', () => {
+  it('composites backdrop, rounded video, chrome and each timed cue', () => {
+    const graph = shortFilter(20, [
+      { start: 1, end: 4 },
+      { start: 5, end: 9 },
+    ]);
+    expect(graph).toContain('alphamerge');
+    expect(graph).toContain("[l0][cue0]overlay=0:1222:format=auto:enable='between(t,1.000,4.000)'[l1]");
+    expect(graph).toContain('[5:v]format=rgba');
+    expect(graph).toContain('[l2]fade=t=in:st=0:d=0.35,fade=t=out:st=19.600');
+  });
+  it('captions commentary, else a model description, never a template', () => {
+    const h = highlight();
+    h.caption = { title: 't', description: 'Template text', tags: [], model: 'template', generatedAt: '' };
+    expect(timedCues(h, 20)).toEqual([]);
+    h.caption = { ...h.caption, model: 'gemini', description: 'A low drive beats the keeper.' };
+    expect(timedCues(h, 20)).toEqual([{ start: 0.8, end: 19.7, text: 'A low drive beats the keeper.', commentary: false }]);
+    h.caption.commentary = [
+      { start: 1, end: 3, text: 'He shoots!' },
+      { start: 19, end: 25, text: 'What a goal' },
+      { start: 22, end: 24, text: 'after the end' },
+    ];
+    expect(timedCues(h, 20)).toEqual([
+      { start: 1, end: 3, text: 'He shoots!', commentary: true },
+      { start: 19, end: 20, text: 'What a goal', commentary: true },
+    ]);
+  });
+  it('waits for YouTube quota resets instead of failing jobs', () => {
+    expect(isQuotaError(new GoogleError(403, 'quotaExceeded'))).toBe(true);
+    expect(isQuotaError(new GoogleError(400, 'uploadLimitExceeded'))).toBe(true);
+    expect(isQuotaError(new GoogleError(403, 'forbidden'))).toBe(false);
+    // 2026-11-07 10:00 PST → next reset 2026-11-08 00:00 PST (+1 minute margin).
+    const now = Date.parse('2026-11-07T18:00:00Z');
+    expect(new Date(nextPacificMidnight(now)).toISOString()).toBe('2026-11-08T08:01:00.000Z');
+  });
+});
+
+describe('caption sync', () => {
+  const speech = [
+    { start: 0, end: 1.85 },
+    { start: 2.35, end: 6.15 },
+    { start: 7.2, end: 9.35 },
+    { start: 15.1, end: 16.6 },
+  ];
+  it('snaps drifted model timings to spoken onsets and pauses', () => {
+    expect(
+      alignCues(
+        [
+          { start: 0.8, end: 3.4, text: 'a' },
+          { start: 3.4, end: 7.0, text: 'b' },
+          { start: 6.2, end: 9.0, text: 'c' },
+          { start: 14.1, end: 17.4, text: 'd' },
+        ],
+        speech,
+        20,
+      ),
+    ).toEqual([
+      { start: 0, end: 3.4, text: 'a' },
+      { start: 3.4, end: 6.55, text: 'b' },
+      { start: 7.2, end: 9.75, text: 'c' },
+      { start: 15.1, end: 17, text: 'd' },
+    ]);
+  });
+  it('keeps model timings when no speech is detected', () => {
+    const cues = [{ start: 1, end: 2, text: 'x' }];
+    expect(alignCues(cues, [], 10)).toBe(cues);
+  });
+  it('finds voiced segments above the crowd floor', () => {
+    const levels = [...Array(20).fill(50), ...Array(30).fill(66), ...Array(20).fill(50), ...Array(10).fill(65)];
+    expect(speechSegments(levels)).toEqual([
+      { start: 1, end: 2.5 },
+      { start: 3.5, end: 4 },
+    ]);
+  });
+});
+
+describe('whisper commentary', () => {
+  it('derives the DTW preset from the model file', () => {
+    expect(dtwPreset('/m/ggml-small.bin')).toBe('small');
+    expect(dtwPreset('ggml-base.en.bin')).toBe('base.en');
+    expect(dtwPreset('ggml-large-v3-turbo-q5_0.bin')).toBe('large.v3.turbo');
+  });
+  it('builds timed words, ignoring prompt echoes, late punctuation and noise outside speech', () => {
+    const tok = (text: string, t: number, p = 0.9) => ({ text, t_dtw: t * 100, p });
+    const words = tokensToWords(
+      [
+        { text: '[_BEG_]', t_dtw: 0 },
+        tok(' Cup', 0),
+        tok(' Final', 0),
+        tok(' World', 0),
+        tok(' Here', 1.0),
+        tok(' comes', 1.3),
+        tok(' Mb', 1.7),
+        tok('appé', 1.9),
+        tok('.', 3.0),
+        tok(' Thanks', 8.0),
+      ],
+      [{ start: 0.9, end: 2.2 }],
+      10,
+    );
+    expect(words).toEqual([
+      { start: 1, end: 1.3, text: 'Here' },
+      { start: 1.3, end: 1.65, text: 'comes' },
+      { start: 1.7, end: 2.25, text: 'Mbappé.' },
+    ]);
+  });
+  it('groups words into readable cues split at pauses and clause ends', () => {
+    const cues = wordsToCues(
+      [
+        { start: 0, end: 0.4, text: 'Messi' },
+        { start: 0.4, end: 0.8, text: 'six,' },
+        { start: 0.8, end: 1.2, text: 'Mbappé' },
+        { start: 1.2, end: 1.6, text: 'five.' },
+        { start: 4, end: 4.5, text: 'Moved' },
+        { start: 4.5, end: 5, text: 'out.' },
+      ],
+      10,
+    );
+    expect(cues).toEqual([
+      { start: 0, end: 2, text: 'Messi six, Mbappé five.' },
+      { start: 4, end: 5.4, text: 'Moved out.' },
+    ]);
   });
 });

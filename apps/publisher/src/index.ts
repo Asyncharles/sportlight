@@ -7,8 +7,10 @@ import {
   routingKeyFor,
   type AnyFeedEvent,
   type LoopingMp4Source,
+  type MediaCredit,
 } from '@sportlight/shared';
 import { DEMO_FEEDS, inWindows, intensityAt, type DemoFeed } from './scenario.js';
+import { openDatasetFeeds } from './open-dataset.js';
 
 /**
  * Mock feed provider. Publishes the demo scenario to RabbitMQ exactly as a real provider adapter
@@ -45,7 +47,11 @@ const log = (msg: string, fields?: Record<string, unknown>) =>
 
 // ---------------------------------------------------------------- media catalog
 
-interface CatalogClip {
+export interface CatalogClip {
+  sportId?: string;
+  dataset?: string;
+  credits?: MediaCredit[];
+  attributionNotice?: string;
   id: string;
   video: string;
   poster: string;
@@ -84,6 +90,8 @@ function sourceFor(clip: CatalogClip): LoopingMp4Source {
     // Begin inside the broadcast instead of randomly landing in an interval or credits.
     mediaOffsetSec: Math.min(clip.startOffsetSec ?? 0, Math.max(0, clip.durationSec - 1)),
     hasAudio: clip.hasAudio,
+    credits: clip.credits,
+    attributionNotice: clip.attributionNotice,
     posterUrl: `${base}/${clip.poster}`,
     thumbnails: { ...clip.thumbnails, template: `${base}/${clip.thumbnails.template}` },
   };
@@ -108,7 +116,9 @@ async function connect(): Promise<void> {
       c.on('error', (err) => log('amqp error', { err: err.message }));
       const ch = await c.createConfirmChannel();
       ch.on('error', (err) => log('amqp channel error', { err: err.message }));
-      ch.on('close', () => { void c.close().catch(() => {}); });
+      ch.on('close', () => {
+        void c.close().catch(() => {});
+      });
       await ch.assertExchange(AMQP_TOPOLOGY.exchange, AMQP_TOPOLOGY.exchangeType, { durable: true });
       c.on('error', (err) => log('amqp error', { err: err.message }));
       c.on('close', () => {
@@ -143,17 +153,23 @@ function rawPublish(key: string, body: Buffer, id: string, lifecycle: boolean) {
     return;
   }
   const publishingConnection = conn;
-  channel.publish(AMQP_TOPOLOGY.exchange, key, body, {
-    messageId: id,
-    contentType: 'application/json',
-    persistent: lifecycle,
-    timestamp: Math.floor(Date.now() / 1000),
-  }, (err: Error | null) => {
-    if (err && lifecycle && outbox.length < 1000) {
-      outbox.push({ key, body, id });
-      if (!stopping) void publishingConnection?.close().catch(() => {});
-    }
-  });
+  channel.publish(
+    AMQP_TOPOLOGY.exchange,
+    key,
+    body,
+    {
+      messageId: id,
+      contentType: 'application/json',
+      persistent: lifecycle,
+      timestamp: Math.floor(Date.now() / 1000),
+    },
+    (err: Error | null) => {
+      if (err && lifecycle && outbox.length < 1000) {
+        outbox.push({ key, body, id });
+        if (!stopping) void publishingConnection?.close().catch(() => {});
+      }
+    },
+  );
 }
 
 function publish(event: AnyFeedEvent, sportId: string) {
@@ -186,6 +202,7 @@ interface Run {
 }
 
 const runs = new Map<string, Run>();
+const activeFeeds: DemoFeed[] = [...DEMO_FEEDS];
 
 function envelope<T extends AnyFeedEvent['type']>(
   feed: DemoFeed,
@@ -230,7 +247,7 @@ function step(catalog: Map<string, CatalogClip>, processStart: number) {
   const now = Date.now();
   const t = config.offsetSec + ((now - processStart) / 1000) * config.speed;
 
-  for (const feed of DEMO_FEEDS) {
+  for (const feed of activeFeeds) {
     const clip = catalog.get(feed.clipId);
     if (!clip) continue;
     const shouldBeLive = inWindows(feed.live, t);
@@ -279,7 +296,7 @@ function step(catalog: Map<string, CatalogClip>, processStart: number) {
 function onReconnected() {
   // The backend may have missed lifecycle events; re-announce every running feed.
   const now = Date.now();
-  for (const feed of DEMO_FEEDS) {
+  for (const feed of activeFeeds) {
     const run = runs.get(feed.id);
     if (run) announce(feed, run, now);
   }
@@ -287,8 +304,10 @@ function onReconnected() {
 
 async function main() {
   log('starting', { seed: config.seed, speed: config.speed, offsetSec: config.offsetSec, chaos: config.chaos });
-  const catalog = await loadCatalog();
-  for (const feed of DEMO_FEEDS) {
+  let catalog = await loadCatalog();
+  activeFeeds.push(...openDatasetFeeds([...catalog.values()]));
+  log('catalog loaded', { clips: catalog.size, feeds: activeFeeds.length });
+  for (const feed of activeFeeds) {
     const event = catalog.get(feed.clipId)?.event;
     if (event) {
       Object.assign(feed, event);
@@ -298,20 +317,38 @@ async function main() {
       delete feed.competitionId;
     }
   }
-  const missing = DEMO_FEEDS.filter((f) => !catalog.has(f.clipId)).map((f) => f.id);
+  const missing = activeFeeds.filter((f) => !catalog.has(f.clipId)).map((f) => f.id);
   if (missing.length) log('feeds without media are skipped', { missing });
   await connect();
 
   const processStart = Date.now();
   step(catalog, processStart);
   const timer = setInterval(() => step(catalog, processStart), config.tickMs);
+  let refreshing = false;
+  const catalogTimer = setInterval(() => {
+    if (refreshing || stopping) return;
+    refreshing = true;
+    void loadCatalog()
+      .then((next) => {
+        if (stopping) return;
+        const known = new Set(activeFeeds.map((feed) => feed.id));
+        const added = openDatasetFeeds([...next.values()]).filter((feed) => !known.has(feed.id));
+        activeFeeds.push(...added);
+        catalog = next;
+        if (added.length) log('new test media activated', { added: added.length, clips: catalog.size });
+      })
+      .finally(() => {
+        refreshing = false;
+      });
+  }, 15_000);
 
   const shutdown = async () => {
     if (stopping) return;
     stopping = true;
     clearInterval(timer);
+    clearInterval(catalogTimer);
     log('shutting down: ending all feeds');
-    for (const feed of DEMO_FEEDS) {
+    for (const feed of activeFeeds) {
       const run = runs.get(feed.id);
       if (run) publish(envelope(feed, run, 'feed.ended', { reason: 'cancelled' }), feed.sportId);
     }

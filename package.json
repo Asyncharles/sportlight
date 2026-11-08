@@ -14,12 +14,14 @@
   "scripts": {
     "build": "npm run build -w @sportlight/shared && npm run build -w @sportlight/backend -w @sportlight/publisher -w @sportlight/web",
     "dev": "npm run build -w @sportlight/shared && concurrently -k -n shared,backend,publisher,web -c gray,green,magenta,cyan \"npm run dev -w @sportlight/shared\" \"npm run dev -w @sportlight/backend\" \"npm run dev -w @sportlight/publisher\" \"npm run dev -w @sportlight/web\"",
-    "media": "node media/build.mjs",
+    "media": "python3 media/collect-open.py",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "npm run build -w @sportlight/shared && tsc -p apps/backend --noEmit && tsc -p apps/publisher --noEmit && tsc -p apps/web --noEmit",
     "format": "prettier --write .",
-    "setup:youtube": "node scripts/setup-youtube.mjs"
+    "setup:youtube": "node scripts/setup-youtube.mjs",
+    "media:open": "python3 media/collect-open.py",
+    "media:replays": "node media/build.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.19.43",

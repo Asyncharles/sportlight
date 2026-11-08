@@ -141,16 +141,24 @@ function sportNames(ids: SportId[]) {
 
 /** Source attribution for the local demo replays. */
 function Credits() {
-  const [credits, setCredits] = useState<Array<{ id: string; credits: Credit[]; synthetic: boolean }> | null>(null);
+  const [credits, setCredits] = useState<Array<{
+    id: string;
+    credits: Credit[];
+    synthetic: boolean;
+    attributionNotice?: string;
+  }> | null>(null);
   useEffect(() => {
     fetch(mediaUrl('/media/catalog.json')!)
       .then((r) => (r.ok ? r.json() : null))
-      .then((c: { clips: Array<{ id: string; credits: Credit[]; synthetic: boolean }> } | null) =>
-        setCredits(c?.clips ?? []),
+      .then(
+        (
+          c: { clips: Array<{ id: string; credits: Credit[]; synthetic: boolean; attributionNotice?: string }> } | null,
+        ) => setCredits(c?.clips ?? []),
       )
       .catch(() => setCredits([]));
   }, []);
   const all = credits?.flatMap((c) => c.credits) ?? [];
+  const notices = [...new Set(credits?.map((c) => c.attributionNotice).filter(Boolean) ?? [])];
   return (
     <details className={styles.credits}>
       <summary>Demo media credits</summary>
@@ -178,7 +186,15 @@ function Credits() {
           ))}
         </ul>
       )}
-      <p className={styles.hint}>Full broadcast replays from YouTube, played locally at normal speed.</p>
+      {notices.map((notice) => (
+        <p key={notice} className={styles.hint}>
+          {notice}
+        </p>
+      ))}
+      <p className={styles.hint}>
+        Sports test footage is transcoded and resized, and plays at normal speed. Source licenses and attribution
+        requirements are linked above.
+      </p>
     </details>
   );
 }

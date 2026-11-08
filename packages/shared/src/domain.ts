@@ -83,6 +83,14 @@ export interface ThumbnailStrip {
   count: number;
 }
 
+export interface MediaCredit {
+  title: string;
+  author: string;
+  license: string;
+  licenseUrl: string | null;
+  sourceUrl: string;
+}
+
 export interface LoopingMp4Source {
   kind: 'looping-mp4';
   /** Absolute URL, or origin-relative path (resolved against the client's media base). */
@@ -93,6 +101,9 @@ export interface LoopingMp4Source {
   hasAudio: boolean;
   posterUrl?: string;
   thumbnails?: ThumbnailStrip;
+  /** Attribution travels with the footage into saved highlights and exported descriptions. */
+  credits?: MediaCredit[];
+  attributionNotice?: string;
 }
 
 export type FeedStatus = 'live' | 'unavailable' | 'ended';

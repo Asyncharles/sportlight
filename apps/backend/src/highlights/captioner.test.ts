@@ -8,6 +8,7 @@ import {
   HighlightCaptioner,
   TemplateCaptioner,
   momentFacts,
+  parseCues,
   parseDraft,
 } from './captioner.js';
 
@@ -121,7 +122,7 @@ describe('GeminiCaptioner', () => {
     expect((init.headers as Record<string, string>)['x-goog-api-key']).toBe('KEY');
     const body = JSON.parse(init.body as string);
     expect(body.generationConfig.responseMimeType).toBe('application/json');
-    expect(body.generationConfig.responseSchema.required).toEqual(['title', 'description', 'tags']);
+    expect(body.generationConfig.responseSchema.required).toEqual(['title', 'description', 'tags', 'commentary']);
     const parts = body.contents[0].parts;
     expect(parts[0].text).not.toContain('intensity');
     expect(parts[0].text).not.toContain('France v Germany');
@@ -292,5 +293,37 @@ describe('video caption lifecycle', () => {
     expect(c.stats.failed).toBe(1);
     expect(c.stats.pending).toBe(0);
     c.stop();
+  });
+});
+
+describe('parseCues', () => {
+  it('orders, clamps and de-overlaps commentary cues', () => {
+    expect(
+      parseCues(
+        [
+          { start: 5, end: 7, text: 'second' },
+          { start: -1, end: 2.5, text: '  first   cue ' },
+          { start: 6, end: 8, text: 'overlaps' },
+          { start: 9, end: 30, text: 'runs past the end' },
+          { start: 3, end: 3.1, text: 'too short' },
+          { start: 'x', end: 4, text: 'bad' },
+        ],
+        12,
+      ),
+    ).toEqual([
+      { start: 0, end: 2.5, text: 'first cue' },
+      { start: 5, end: 7, text: 'second' },
+      { start: 7, end: 8, text: 'overlaps' },
+      { start: 9, end: 12, text: 'runs past the end' },
+    ]);
+    expect(parseCues('nope')).toEqual([]);
+  });
+  it('keeps cues returned with the caption', () => {
+    const d = parseDraft(
+      '{"title":"T","description":"D","tags":[],"commentary":[{"start":1,"end":2,"text":"Goal!"}]}',
+      10,
+    );
+    expect(d.commentary).toEqual([{ start: 1, end: 2, text: 'Goal!' }]);
+    expect(parseDraft('{"title":"T","description":"D","tags":[],"commentary":[]}').commentary).toBeUndefined();
   });
 });

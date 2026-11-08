@@ -19,6 +19,7 @@ export interface ContentJob {
 export interface ContentSettings {
   enabled: boolean;
   minPeak: number;
+  /** Maximum uploads per day; 0 means no cap. */
   dailyLimit: number;
   intervalMinutes: number;
 }
@@ -33,4 +34,15 @@ export interface ContentOverview {
   jobs?: ContentJob[];
   timezone?: string;
   connectionError?: string;
+  schedule?: ContentSchedule;
+}
+/** What the publishing worker is doing or waiting for right now. */
+export interface ContentSchedule {
+  state: 'working' | 'waiting' | 'idle' | 'paused' | 'blocked';
+  /** working: the active job; waiting: the job that will start next. */
+  jobId?: string;
+  /** Why the next job has not started yet. */
+  reason?: 'interval' | 'settling' | 'quota' | 'daily_limit' | 'caption';
+  /** When the next job can start (waiting only). */
+  nextAt?: number;
 }

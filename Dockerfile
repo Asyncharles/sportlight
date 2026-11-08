@@ -34,16 +34,36 @@ COPY apps/publisher/package.json apps/publisher/
 COPY apps/web/package.json apps/web/
 RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --no-audit --no-fund --workspace @sportlight/backend --workspace @sportlight/publisher --include-workspace-root=false
 
+# ---------------------------------------------------------------- whisper.cpp (commentary captions)
+FROM node:${NODE_VERSION}-alpine AS whisper
+ARG WHISPER_VERSION=v1.9.5
+# ggml-small.bin, multilingual; SHA-1 as published in whisper.cpp's models/README.
+ARG WHISPER_MODEL_SHA1=55356645c2b361a969dfd0ef2c5a50d530afd8d5
+RUN apk add --no-cache build-base cmake git curl
+RUN git clone --depth 1 --branch ${WHISPER_VERSION} https://github.com/ggml-org/whisper.cpp /src \
+ && cmake -S /src -B /build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF \
+      -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_SERVER=OFF \
+ && cmake --build /build -j --config Release --target whisper-cli
+RUN curl -fsSL -o /ggml-small.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin \
+ && echo "${WHISPER_MODEL_SHA1}  /ggml-small.bin" | sha1sum -c -
+
 # ---------------------------------------------------------------- backend
 FROM node:${NODE_VERSION}-alpine AS backend
-ENV NODE_ENV=production PORT=4000 DATA_DIR=/data
-RUN apk add --no-cache ffmpeg
+ENV NODE_ENV=production PORT=4000 DATA_DIR=/data WHISPER_PATH=/usr/local/bin/whisper-cli WHISPER_MODEL=/opt/whisper/ggml-small.bin
+RUN apk add --no-cache ffmpeg libstdc++
+COPY --from=whisper /build/bin/whisper-cli /usr/local/bin/whisper-cli
+COPY --from=whisper /ggml-small.bin /opt/whisper/ggml-small.bin
 WORKDIR /app
 COPY --from=prod-deps /app/node_modules ./node_modules
+# Workspace-local dependencies (e.g. the native canvas used to draw Shorts graphics).
+COPY --from=prod-deps /app/apps/backend/node_modules ./apps/backend/node_modules
 COPY --from=build /app/packages/shared/package.json ./packages/shared/package.json
 COPY --from=build /app/packages/shared/dist ./packages/shared/dist
 COPY --from=build /app/apps/backend/package.json ./apps/backend/package.json
 COPY --from=build /app/apps/backend/dist ./apps/backend/dist
+# Brand font and logo burned into rendered Shorts.
+COPY fonts ./fonts
+COPY logos ./logos
 RUN mkdir -p /data && chown node:node /data
 USER node
 VOLUME /data

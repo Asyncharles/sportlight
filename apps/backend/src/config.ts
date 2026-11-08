@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import {
   DEFAULT_HIGHLIGHT_CONFIG,
   DEFAULT_SELECTION_CONFIG,
@@ -33,6 +34,8 @@ export interface BackendConfig {
   content: {
     appUrl: string; clientId: string; clientSecret: string; encryptionKey: string;
     allowedEmails: string[]; mediaBase: string; ffmpegPath: string; settleSeconds: number;
+    /** whisper.cpp CLI and ggml model for commentary captions; captions fall back to the caption model without them. */
+    whisperPath: string; whisperModel: string; whisperDtw?: string;
   };
   captions: {
     /** Gemini API key. Without one, highlights keep their deterministic template captions. */
@@ -105,6 +108,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig 
       allowedEmails: (env.CONTENT_ALLOWED_EMAILS || '').split(',').map(v => v.trim().toLowerCase()).filter(Boolean),
       mediaBase: str('MEDIA_FETCH_BASE', 'http://localhost:5173/media'),
       ffmpegPath: str('FFMPEG_PATH', 'ffmpeg'), settleSeconds: num('CONTENT_SETTLE_SECONDS', 30),
+      whisperPath: str('WHISPER_PATH', 'whisper-cli'),
+      whisperModel: str('WHISPER_MODEL', join(str('DATA_DIR', './data'), 'models', 'ggml-small.bin')),
+      whisperDtw: env.WHISPER_DTW?.trim() || undefined,
     },
     captions: {
       geminiApiKey: env.GEMINI_API_KEY?.trim() || null,

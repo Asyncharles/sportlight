@@ -34,12 +34,23 @@ export interface HighlightCaption {
   /** One or two sentences describing the moment. */
   description: string;
   tags: string[];
+  /**
+   * Timed subtitle cues of the broadcast commentary heard in the clip (seconds from clip start),
+   * transcribed by the model. Absent for template captions or clips without audible commentary.
+   */
+  commentary?: CaptionCue[];
   /** Model that wrote it (`template` when no model is configured). */
   model: string;
   generatedAt: string;
   /** Caption pipeline revision and exact source window, used to invalidate stale captions. */
   version?: string;
   sourceSignature?: string;
+}
+
+export interface CaptionCue {
+  start: number;
+  end: number;
+  text: string;
 }
 
 export type HighlightTier = 'large' | 'medium' | 'small';

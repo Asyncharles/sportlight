@@ -17,6 +17,8 @@ export interface Connection {
 }
 interface State {
   version: 1;
+  /** Settings schema revision; 2 introduced `dailyLimit: 0` meaning no daily cap. */
+  settingsRevision?: number;
   settings: ContentSettings;
   connection?: Connection;
   connectionError?: string;
@@ -28,7 +30,8 @@ interface State {
 export class ContentStore {
   state: State = {
     version: 1,
-    settings: { enabled: true, minPeak: 90, dailyLimit: 5, intervalMinutes: 15 },
+    settings: { enabled: true, minPeak: 90, dailyLimit: 0, intervalMinutes: 15 },
+    settingsRevision: 2,
     jobs: [],
     seen: [],
   };
@@ -41,6 +44,11 @@ export class ContentStore {
       if (this.state.version !== 1 || !Array.isArray(this.state.jobs)) throw new Error('Invalid content state');
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+    }
+    if ((this.state.settingsRevision ?? 1) < 2) {
+      // The old built-in default of 5/day was a cap nobody chose; lift it. Explicit other values stay.
+      if (this.state.settings.dailyLimit === 5) this.state.settings.dailyLimit = 0;
+      this.state.settingsRevision = 2;
     }
     for (const job of this.state.jobs) {
       if (job.status === 'rendering') job.status = 'queued';

@@ -3,11 +3,12 @@ import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
-import { dayKey, type ContentOverview, type Highlight } from '@sportlight/shared';
+import { dayKey, type ContentOverview, type ContentSchedule, type Highlight } from '@sportlight/shared';
 import { z } from 'zod';
 import type { BackendConfig } from '../config.js';
 import type { Logger } from '../logger.js';
 import { beginUpload, GoogleError, googleFetch, resumeUpload, SCOPES, tokenRequest } from './google.js';
+import { CAPTION_VERSION } from '../highlights/captioner.js';
 import { renderClip } from './renderer.js';
 import { ContentStore, overlaps, publicJob, seal, unseal, type Job } from './store.js';
 
@@ -15,7 +16,8 @@ const settingsSchema = z
   .object({
     enabled: z.boolean(),
     minPeak: z.number().int().min(0).max(100),
-    dailyLimit: z.number().int().min(1).max(100),
+    /** 0 means no daily cap (YouTube's own API quota still applies). */
+    dailyLimit: z.number().int().min(0).max(1000),
     intervalMinutes: z.number().int().min(0).max(1440),
   })
   .strict();
@@ -40,6 +42,8 @@ export class ContentService {
   private running?: Promise<void>;
   private stopped = false;
   private persistenceFailed = false;
+  /** YouTube API quota was exhausted; no new uploads begin before this (its midnight Pacific reset). */
+  private quotaResetAt = 0;
   private readonly options: BackendConfig['content'];
   constructor(
     private config: BackendConfig,
@@ -117,6 +121,7 @@ export class ContentService {
       settings: state.settings,
       jobs: state.jobs.slice(-500).reverse().map(publicJob),
       timezone: this.config.highlights.timezone,
+      schedule: this.schedule(Date.now()),
       connectionError: this.persistenceFailed
         ? 'Storage failed. Publishing stopped; check server storage and restart.'
         : state.connectionError,
@@ -355,7 +360,15 @@ export class ContentService {
     const seen = new Set(state.seen);
     let changed = false;
     for (const job of state.jobs) {
-      if (job.status !== 'queued' || job.uploadSession || job.channelId !== state.connection.id) continue;
+      if (job.status !== 'queued' || job.uploadSession) continue;
+      if (job.channelId !== state.connection.id) {
+        // The worker only serves the connected channel, so these would otherwise wait forever.
+        job.status = 'skipped';
+        job.message = 'A different channel was connected before this was uploaded.';
+        job.updatedAt = now;
+        changed = true;
+        continue;
+      }
       const h = current.get(job.highlight.id);
       if (!h) {
         job.status = 'skipped';
@@ -367,7 +380,9 @@ export class ContentService {
         job.readyAt = now + this.options.settleSeconds * 1000;
         changed = true;
       } else if (JSON.stringify(job.highlight.caption) !== JSON.stringify(h.caption)) {
+        // Title and commentary are burned into the video, so a new caption needs a fresh render.
         job.highlight = structuredClone(h);
+        job.rendered = false;
         changed = true;
       }
     }
@@ -433,24 +448,37 @@ export class ContentService {
       const started = jobs.filter((j) => j.uploadStartedAt !== undefined);
       const today = dayKey(now, this.config.highlights.timezone);
       if (
+        state.settings.dailyLimit > 0 &&
         started.filter((j) => dayKey(j.uploadStartedAt!, this.config.highlights.timezone) === today).length >=
-        state.settings.dailyLimit
+          state.settings.dailyLimit
       )
         return;
+      if (now < this.quotaResetAt) return;
       if (started.some((j) => now - j.uploadStartedAt! < state.settings.intervalMinutes * 60_000)) return;
+    }
+    if (!job.rendered && !job.uploadSession && this.awaitingCaption(job, now)) {
+      job.readyAt = now + 15_000;
+      job.message = 'Waiting for the video caption and commentary transcript.';
+      job.updatedAt = now;
+      await this.store.save();
+      return;
     }
     try {
       if (!job.rendered) {
         job.status = 'rendering';
+        delete job.message;
         job.updatedAt = now;
         await this.store.save();
-        await renderClip(
+        const render = await renderClip(
           job.highlight,
           join(this.store.dir, job.id),
           this.options.mediaBase,
           this.config.captions.mediaPublicPrefix,
           this.options.ffmpegPath,
+          { path: this.options.whisperPath, model: this.options.whisperModel, dtw: this.options.whisperDtw },
         );
+        this.log.info('short rendered', { job: job.id, captions: render.captions });
+        if (render.warning) this.log.warn(render.warning, { job: job.id });
         job.rendered = true;
         job.status = 'queued';
         await this.store.save();
@@ -499,6 +527,18 @@ export class ContentService {
       job.attempts = 0;
       delete job.message;
     } catch (error) {
+      if (isQuotaError(error)) {
+        // Not a fault of this clip: wait for YouTube's daily quota reset and carry on, without burning attempts.
+        this.quotaResetAt = nextPacificMidnight(Date.now());
+        if (!job.uploadSession) delete job.uploadStartedAt;
+        job.status = job.uploadSession ? 'uploading' : 'queued';
+        job.readyAt = this.quotaResetAt;
+        job.message =
+          'YouTube API daily quota reached. Uploads resume automatically after the quota resets (midnight Pacific).';
+        job.updatedAt = Date.now();
+        await this.store.save();
+        return;
+      }
       job.attempts++;
       const expired = error instanceof GoogleError && [404, 410].includes(error.status) && job.uploadSession;
       const retryable = !(error instanceof GoogleError) || error.status >= 500 || error.status === 429;
@@ -518,6 +558,47 @@ export class ContentService {
     }
     job.updatedAt = Date.now();
     await this.store.save();
+  }
+  /** Mirrors the gates in tick() so the dashboard can say what the worker is doing or waiting for. */
+  schedule(now: number): ContentSchedule {
+    const state = this.store.state;
+    const connection = state.connection;
+    if (!connection || state.connectionError || this.persistenceFailed) return { state: 'blocked' };
+    const jobs = state.jobs.filter((j) => j.channelId === connection.id);
+    const active = jobs.find((j) => ['rendering', 'uploading', 'processing'].includes(j.status));
+    if (active) return { state: 'working', jobId: active.id };
+    if (!state.settings.enabled) return { state: 'paused' };
+    const queued = jobs.filter((j) => j.status === 'queued');
+    const next = queued.find((j) => j.readyAt <= now) ?? queued.sort((a, b) => a.readyAt - b.readyAt)[0];
+    if (!next) return { state: 'idle' };
+    const wait = (reason: ContentSchedule['reason'], nextAt?: number): ContentSchedule => ({
+      state: 'waiting',
+      jobId: next.id,
+      reason,
+      nextAt,
+    });
+    if (next.uploadSession) return wait('settling', next.readyAt);
+    const started = jobs.filter((j) => j.uploadStartedAt !== undefined);
+    const tz = this.config.highlights.timezone;
+    if (
+      state.settings.dailyLimit > 0 &&
+      started.filter((j) => dayKey(j.uploadStartedAt!, tz) === dayKey(now, tz)).length >= state.settings.dailyLimit
+    )
+      return wait('daily_limit');
+    if (now < this.quotaResetAt) return wait('quota', this.quotaResetAt);
+    const lastStart = Math.max(0, ...started.map((j) => j.uploadStartedAt!));
+    const slot = lastStart + state.settings.intervalMinutes * 60_000;
+    if (slot > now && slot >= next.readyAt) return wait('interval', slot);
+    if (next.readyAt > now) return wait(next.message?.includes('caption') ? 'caption' : 'settling', next.readyAt);
+    return wait(undefined, now);
+  }
+  /** With a model configured, give it up to 10 minutes to write the caption the render burns in. */
+  private awaitingCaption(job: Job, now: number) {
+    return (
+      !!this.config.captions.geminiApiKey &&
+      job.highlight.caption?.version !== CAPTION_VERSION &&
+      now - job.createdAt < 10 * 60_000
+    );
   }
   private async poll(job: Job, now: number) {
     try {
@@ -567,6 +648,24 @@ export class ContentService {
     job.updatedAt = now;
     await this.store.save();
   }
+}
+const QUOTA_REASONS = new Set(['quotaExceeded', 'dailyLimitExceeded', 'uploadLimitExceeded']);
+export function isQuotaError(error: unknown) {
+  // uploadLimitExceeded (per-channel upload cap) arrives as 400; API quota errors as 403.
+  return error instanceof GoogleError && [400, 403].includes(error.status) && QUOTA_REASONS.has(error.reason);
+}
+/** YouTube Data API quotas reset at midnight Pacific time. Adds a minute of margin. */
+export function nextPacificMidnight(now: number) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles',
+    hourCycle: 'h23',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(now);
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? 0);
+  const elapsed = get('hour') * 3600 + get('minute') * 60 + get('second');
+  return now + (86_400 - elapsed + 60) * 1000;
 }
 function json(res: ServerResponse, status: number, body: unknown) {
   res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });

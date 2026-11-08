@@ -36,10 +36,23 @@ export async function tokenRequest(params: Record<string, string>) {
 }
 export function uploadMetadata(highlight: Highlight) {
   const clean = (s: string) => s.replace(/[<>]/g, '').trim();
+  const credits = (highlight.source.credits ?? [])
+    .map(
+      (c) =>
+        `${clean(c.title)} — ${clean(c.author)}\n${clean(c.license)}${c.licenseUrl ? `: ${clean(c.licenseUrl)}` : ''}\nSource: ${clean(c.sourceUrl)}`,
+    )
+    .join('\n\n');
+  const attribution = credits
+    ? `\n\nFootage credits:\n${credits}\nChanges: excerpted, reframed and captioned for this Short.`
+    : '';
+  const notice = highlight.source.attributionNotice ? `\n${clean(highlight.source.attributionNotice)}` : '';
+  // YouTube descriptions allow 5,000 characters. Reserve space for the complete attribution.
+  const suffix = `\n\n${clean(highlight.event.title)} · Sportlight\n#Shorts #Sportlight${attribution}${notice}`;
+  if (suffix.length > 4900) throw new Error('Footage attribution exceeds YouTube description limit');
   return {
     snippet: {
       title: `${clean(highlight.caption?.title || highlight.event.title).slice(0, 90)} #Shorts`,
-      description: `${clean(highlight.caption?.description || highlight.event.title).slice(0, 4000)}\n\n${clean(highlight.event.title)} · Sportlight\n#Shorts #Sportlight`,
+      description: `${clean(highlight.caption?.description || highlight.event.title).slice(0, 5000 - suffix.length)}${suffix}`,
       tags: ['Shorts', 'Sportlight', highlight.sportId],
       categoryId: '17',
     },

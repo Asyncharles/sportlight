@@ -13,3 +13,6 @@ data/
 apps/backend/data/
 
 media/.tools/
+
+# Python media importer bytecode
+media/__pycache__/

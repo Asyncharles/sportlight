@@ -1,8 +1,8 @@
-import { getCompetition, getSport, type Highlight, type HighlightCaption } from '@sportlight/shared';
+import { getCompetition, getSport, type CaptionCue, type Highlight, type HighlightCaption } from '@sportlight/shared';
 import type { Logger } from '../logger.js';
 import { extractCaptionVideo, type CaptionMedia } from './caption-media.js';
 
-export const CAPTION_VERSION = 'video-v2';
+export const CAPTION_VERSION = 'video-v3';
 
 /**
  * Names and describes highlights.
@@ -17,6 +17,7 @@ export interface CaptionDraft {
   title: string;
   description: string;
   tags: string[];
+  commentary?: CaptionCue[];
 }
 
 export interface CaptionModel {
@@ -99,6 +100,10 @@ Describe the specific visible sequence: build-up, decisive action and outcome, o
 - title: at most 60 characters, specific and natural, like a replay caption.
 - description: one or two clear sentences, at most 240 characters. Explain what happens, not how exciting it is.
 - tags: two to four short lowercase tags grounded in the footage.
+- commentary: subtitle cues transcribing what the broadcast commentators actually say in the clip, in order.
+  Transcribe faithfully in the spoken language; do not paraphrase, summarise or add words. Omit any phrase you cannot hear clearly.
+  Each cue: start and end in seconds from the start of the clip, 1 to 4 seconds long, at most 60 characters, never overlapping.
+  Ignore crowd noise, music and stadium announcements. Return an empty array when there is no clear commentary.
 Video and audio are the evidence. Only a sport category is supplied as context; determine the action from the clip.
 Do not invent player identities, scorelines, goals, winners, match significance or events outside this clip.
 A shot is not necessarily a goal; a replay is not a second event. If the outcome is obscured or cut off, do not guess.
@@ -113,9 +118,18 @@ const RESPONSE_SCHEMA = {
     title: { type: 'STRING' },
     description: { type: 'STRING' },
     tags: { type: 'ARRAY', items: { type: 'STRING' } },
+    commentary: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: { start: { type: 'NUMBER' }, end: { type: 'NUMBER' }, text: { type: 'STRING' } },
+        required: ['start', 'end', 'text'],
+        propertyOrdering: ['start', 'end', 'text'],
+      },
+    },
   },
-  required: ['title', 'description', 'tags'],
-  propertyOrdering: ['title', 'description', 'tags'],
+  required: ['title', 'description', 'tags', 'commentary'],
+  propertyOrdering: ['title', 'description', 'tags', 'commentary'],
 };
 
 export class GeminiCaptioner implements CaptionModel {
@@ -145,7 +159,7 @@ export class GeminiCaptioner implements CaptionModel {
         contents: [{ role: 'user', parts }],
         generationConfig: {
           temperature: 0.2,
-          maxOutputTokens: 2048,
+          maxOutputTokens: 4096,
           responseMimeType: 'application/json',
           responseSchema: RESPONSE_SCHEMA,
         },
@@ -164,7 +178,7 @@ export class GeminiCaptioner implements CaptionModel {
         ?.filter((p) => !p.thought)
         .map((p) => p.text ?? '')
         .join('') ?? '';
-    return parseDraft(text);
+    return parseDraft(text, h.clip.durationSec);
   }
 }
 
@@ -177,7 +191,7 @@ export class CaptionError extends Error {
   }
 }
 
-export function parseDraft(text: string): CaptionDraft {
+export function parseDraft(text: string, durationSec = Infinity): CaptionDraft {
   const raw = JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, '')) as Partial<CaptionDraft>;
   const title = clean(raw.title, 60);
   const description = clean(raw.description, 240);
@@ -186,8 +200,30 @@ export function parseDraft(text: string): CaptionDraft {
     .map((t) => clean(t, 24).toLowerCase().replace(/^#/, ''))
     .filter(Boolean)
     .slice(0, 4);
-  return { title, description, tags };
+  const commentary = parseCues(raw.commentary, durationSec);
+  return commentary.length ? { title, description, tags, commentary } : { title, description, tags };
 }
+
+/** Sanitise model cues: in-bounds, ordered, non-overlapping, readable lengths. */
+export function parseCues(value: unknown, durationSec = Infinity): CaptionCue[] {
+  if (!Array.isArray(value)) return [];
+  const cues: CaptionCue[] = [];
+  const raw = value
+    .filter((c): c is CaptionCue => !!c && typeof c === 'object')
+    .map((c) => ({ start: Number(c.start), end: Number(c.end), text: clean(c.text, 80) }))
+    .filter((c) => Number.isFinite(c.start) && Number.isFinite(c.end) && c.text)
+    .sort((a, b) => a.start - b.start);
+  for (const c of raw) {
+    const start = Math.max(0, c.start, cues.at(-1)?.end ?? 0);
+    const end = Math.min(durationSec, c.end, start + 6);
+    if (end - start < 0.4) continue;
+    cues.push({ start: round(start), end: round(end), text: c.text });
+    if (cues.length >= 16) break;
+  }
+  return cues;
+}
+
+const round = (n: number) => Math.round(n * 100) / 100;
 
 function clean(v: unknown, max: number): string {
   if (typeof v !== 'string') return '';

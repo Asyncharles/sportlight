@@ -312,7 +312,8 @@ export function reconcile(prev: SelectionState, input: SelectionInput): Reconcil
  * User action: show `feedId` in the main window, immediately.
  *  - From a side slot: swap with the current main feed (which takes that side slot).
  *  - From outside the layout: the current main feed displaces the weakest side feed.
- * Either way the moved feeds restart their minimum display time.
+ * Either way the moved feeds restart their minimum display time. A pin follows the focus: the new main
+ * feed is pinned if it or the old main was, and the old main feed moves out unpinned.
  */
 export function promote(
   prev: SelectionState,
@@ -327,14 +328,10 @@ export function promote(
   const slots = { ...prev.slots };
   const oldMain = slots.main;
   const fromSlot = sideSlots.find((s) => slots[s]?.feedId === feedId);
-  const moved = (a: SlotAssignment): SlotAssignment => ({
-    feedId: a.feedId,
-    placedAt: now,
-    origin: 'user',
-    ...(a.pinned ? { pinned: true } : {}),
-  });
+  const moved = (a: SlotAssignment): SlotAssignment => ({ feedId: a.feedId, placedAt: now, origin: 'user' });
+  const pinned = !!oldMain?.pinned || (fromSlot ? !!slots[fromSlot]?.pinned : false);
 
-  slots.main = fromSlot ? moved(slots[fromSlot]!) : { feedId, placedAt: now, origin: 'user' };
+  slots.main = { feedId, placedAt: now, origin: 'user', ...(pinned ? { pinned: true } : {}) };
   if (fromSlot) {
     slots[fromSlot] = oldMain ? moved(oldMain) : null;
   } else if (oldMain && sideSlots.length > 0) {
@@ -379,16 +376,14 @@ export function setPinned(prev: SelectionState, slot: SlotId, pinned: boolean, n
 
 /**
  * User action: show `feedId` in `slot` and pin it there. If the feed is already in another window
- * the two swap (the displaced feed keeps its own pin); otherwise the slot's current feed is hidden.
+ * the two swap and the displaced feed moves there unpinned; otherwise the slot's current feed is hidden.
  */
 export function assign(prev: SelectionState, slot: SlotId, feedId: FeedId, now: number): SelectionState {
   const slots = { ...prev.slots };
   const current = slots[slot];
   const fromSlot = ALL_SLOTS.find((s) => s !== slot && slots[s]?.feedId === feedId);
   if (fromSlot) {
-    slots[fromSlot] = current
-      ? { feedId: current.feedId, placedAt: now, origin: 'user', ...(current.pinned ? { pinned: true } : {}) }
-      : null;
+    slots[fromSlot] = current ? { feedId: current.feedId, placedAt: now, origin: 'user' } : null;
   }
   slots[slot] = { feedId, placedAt: now, origin: 'user', pinned: true };
   const challengers = { ...prev.challengers };

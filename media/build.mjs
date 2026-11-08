@@ -212,7 +212,7 @@ async function main() {
   const catalog = {
     version: 1,
     generatedAt: new Date().toISOString(),
-    clips: previous.clips.filter((c) => sources.clips.some((s) => s.id === c.id)),
+    clips: previous.clips.filter((c) => c.dataset === 'commons-open-v1' || sources.clips.some((s) => s.id === c.id)),
   };
   async function publishCatalog() {
     catalog.generatedAt = new Date().toISOString();

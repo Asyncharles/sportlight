@@ -324,4 +324,21 @@ describe('viewer options', () => {
     expect(s.slots.main?.pinned).toBe(true);
     expect(s.slots['side-2']?.pinned).toBeUndefined();
   });
+
+  it('moves the pin to the new focus when promoting over a pinned main', () => {
+    let s = setPinned(run(emptySelection(), base, 0).state, 'main', true, 0);
+    s = promote(s, 'c', 1000);
+    expect(ids(s)).toEqual(['c', 'b', 'a', 'd']);
+    expect(s.slots.main?.pinned).toBe(true);
+    expect(s.slots['side-2']?.pinned).toBeUndefined();
+  });
+
+  it('unpins the feed a chosen feed swaps out of the window', () => {
+    let s = assign(run(emptySelection(), base, 0).state, 'main', 'a', 0);
+    expect(s.slots.main?.pinned).toBe(true);
+    s = assign(s, 'main', 'c', 1000);
+    expect(ids(s)).toEqual(['c', 'b', 'a', 'd']);
+    expect(s.slots.main).toMatchObject({ feedId: 'c', pinned: true });
+    expect(s.slots['side-2']?.pinned).toBeUndefined();
+  });
 });

@@ -17,9 +17,7 @@ export const EventInfoSchema = z.object({
   competitionId: id.optional(),
   teamIds: z.array(id).max(16).optional(),
   venue: z.string().max(200).optional(),
-  broadcaster: z
-    .object({ name: z.string().min(1).max(120), channel: z.string().max(120).optional() })
-    .optional(),
+  broadcaster: z.object({ name: z.string().min(1).max(120), channel: z.string().max(120).optional() }).optional(),
 });
 
 export const MediaSourceSchema = z.object({
@@ -29,6 +27,19 @@ export const MediaSourceSchema = z.object({
   mediaOffsetSec: z.number().nonnegative(),
   hasAudio: z.boolean(),
   posterUrl: z.string().max(2048).optional(),
+  credits: z
+    .array(
+      z.object({
+        title: z.string().max(2000),
+        author: z.string().max(4000),
+        license: z.string().max(200),
+        licenseUrl: z.string().max(2048).nullable(),
+        sourceUrl: z.string().max(2048),
+      }),
+    )
+    .max(32)
+    .optional(),
+  attributionNotice: z.string().max(2000).optional(),
   thumbnails: z
     .object({
       template: z.string().max(2048).includes('{index}'),
