@@ -134,7 +134,9 @@ async function main() {
   const footageDir = resolve(from);
   const sources = JSON.parse(await readFile(join(ROOT, 'local-sources.json'), 'utf8'));
   if (only && !sources.clips.some((c) => c.id === only)) throw new Error(`Unknown feed id: ${only}`);
-  await mkdir(OUT, { recursive: true });
+  // local/videos is where Docker mounts the footage inside this read-only folder (local-feeds overlay);
+  // the mount point has to exist already.
+  await mkdir(join(OUT, 'videos'), { recursive: true });
   const catalogPath = join(OUT, 'catalog.json');
   const previous = existsSync(catalogPath) ? JSON.parse(await readFile(catalogPath, 'utf8')).clips : [];
   const byId = new Map(previous.map((c) => [c.id, c]));

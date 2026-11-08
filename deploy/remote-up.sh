@@ -14,7 +14,9 @@ umask 077
 # pulled from the private bucket and mounted into the media server. Deploying without it deletes the
 # footage from this VM.
 FOOTAGE=/opt/sportlight-web/footage
-COMPOSE_FILE=docker-compose.yml:docker-compose.external.yml:deploy/compose.gcp.yml
+BASE_COMPOSE_FILE=docker-compose.yml:docker-compose.external.yml:deploy/compose.gcp.yml
+COMPOSE_FILE=$BASE_COMPOSE_FILE
+cp .env .env.base   # the site without demo footage, to fall back to
 DEMO_FOOTAGE_BUCKET=$(sed -n 's/^DEMO_FOOTAGE_BUCKET=//p' release.env)
 DEMO_FEED_SET=$(sed -n 's/^DEMO_FEED_SET=//p' release.env)
 if [[ -n "${DEMO_FOOTAGE_BUCKET:-}" ]]; then
@@ -22,6 +24,9 @@ if [[ -n "${DEMO_FOOTAGE_BUCKET:-}" ]]; then
   # Demo clips and tuning/; never the striped timing_audio_only/ clips.
   gcloud storage rsync -r --exclude='^timing_audio_only/' "gs://$DEMO_FOOTAGE_BUCKET/samples" "$FOOTAGE/videos" --quiet
   gcloud storage rsync -r "gs://$DEMO_FOOTAGE_BUCKET/sportlight-local" "$FOOTAGE/local" --quiet
+  # The videos are mounted inside the read-only local/ mount, so their mount point must already
+  # exist on the host: Docker cannot create it inside a read-only mount.
+  mkdir -p "$FOOTAGE/local/videos"
   chmod -R a+rX "$FOOTAGE"   # nginx in the media container reads it as a non-root user
   {
     echo "LOCAL_FOOTAGE_DIR=$FOOTAGE/videos"
@@ -36,8 +41,19 @@ else
   echo "demo footage: off"
 fi
 echo "COMPOSE_FILE=$COMPOSE_FILE" >> .env
+echo "COMPOSE_FILE=$BASE_COMPOSE_FILE" >> .env.base
 gcloud auth configure-docker europe-west4-docker.pkg.dev --quiet >/dev/null 2>&1
 docker compose config --quiet      # never print the resolved config: it contains secrets
 S="media backend publisher web caddy"
 docker compose pull --quiet $S
-docker compose up -d --no-build --remove-orphans $S
+if ! docker compose up -d --no-build --remove-orphans $S; then
+  [[ "$COMPOSE_FILE" != "$BASE_COMPOSE_FILE" ]] || exit 1
+  # Demo footage must never take the site down: start it without the footage, then still fail the
+  # deploy so the footage problem is seen.
+  echo "demo footage failed to start; starting the site without it" >&2
+  cp .env.base .env
+  docker compose up -d --no-build --remove-orphans $S
+  rm -f .env.base
+  exit 1
+fi
+rm -f .env.base
