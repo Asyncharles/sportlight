@@ -19,6 +19,25 @@ interface LocalClip {
  * rotated out for other test feeds. Without an engine connected, intensity falls back to a gentle
  * simulated signal.
  */
+/** The engine's demo clips are in the catalog, so the four demo feeds are on air (from us or the engine). */
+export function hasDemoClips(clips: readonly LocalClip[]): boolean {
+  return clips.some((clip) => clip.dataset === LOCAL_DATASET);
+}
+
+/**
+ * The local feeds this publisher announces. When SportlightEngine publishes the four demo feeds
+ * itself (ENGINE_OWNS_DEMO_FEEDS), announcing them here too would make two producers fight over the
+ * same feed ids, so only the extra (tuning) feeds are left.
+ */
+export function publishedLocalFeeds(clips: LocalClip[], engineOwnsDemoFeeds: boolean): DemoFeed[] {
+  return localFeeds(clips).filter((feed) => !(engineOwnsDemoFeeds && feed.pinned));
+}
+
+/** While the demo feeds are on air, every other feed is extra: hidden until a viewer turns extra feeds on. */
+export function isExtraFeed(feed: Pick<DemoFeed, 'pinned'>, demoClipsPresent: boolean): boolean {
+  return !feed.pinned && demoClipsPresent;
+}
+
 export function localFeeds(clips: LocalClip[]): DemoFeed[] {
   return clips.flatMap((clip, index) => {
     const demo = clip.dataset === LOCAL_DATASET;

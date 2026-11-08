@@ -47,18 +47,30 @@ docker compose config --quiet      # never print the resolved config: it contain
 
 # The engine's demo clips (the files SportlightEngine scores), from the private bucket; top-level
 # samples/*.mp4 only, never tuning footage. Never re-encoded: the engine's labels refer to these files.
-FOOTAGE=/opt/sportlight-web/footage
-mkdir -p "$FOOTAGE" && chmod 755 "$FOOTAGE"
-PATH=$PATH:/snap/bin gcloud storage rsync "gs://${ENGINE_BUCKET:-sportlight-514020-si-private}/samples" "$FOOTAGE" \
-  --exclude='.*/.*' --quiet \
-  || echo "WARNING: could not sync the engine demo clips; engine feeds will have no video" >&2
-chmod 644 "$FOOTAGE"/*.mp4 2>/dev/null || true
+# With demo footage on, the sync above already has them (in $FOOTAGE/videos, mounted over this).
+if [[ -z "${DEMO_FOOTAGE_BUCKET:-}" ]]; then
+  mkdir -p "$FOOTAGE" && chmod 755 "$FOOTAGE"
+  PATH=$PATH:/snap/bin gcloud storage rsync "gs://${ENGINE_BUCKET:-sportlight-514020-si-private}/samples" "$FOOTAGE" \
+    --exclude='.*/.*' --quiet \
+    || echo "WARNING: could not sync the engine demo clips; engine feeds will have no video" >&2
+  chmod 644 "$FOOTAGE"/*.mp4 2>/dev/null || true
+fi
 
-# SportlightEngine is the producer; the mock publisher runs only when asked (MOCK_PUBLISHER=1).
-S="media backend web caddy"
+# SportlightEngine publishes the four demo feeds. The publisher runs when asked (MOCK_PUBLISHER=1:
+# every feed, as the mock provider) or with demo footage on, where it announces only the extra feeds
+# (the tuning clips and the open clips, behind Settings > Extra feeds) and leaves the demo feeds to the
+# engine (ENGINE_OWNS_DEMO_FEEDS).
+BASE_S="media backend web caddy"
+S=$BASE_S
 if [[ "${MOCK_PUBLISHER:-0}" == 1 ]]; then
   export COMPOSE_PROFILES=mock
   S="$S publisher"
+  BASE_S=$S
+elif [[ -n "${DEMO_FOOTAGE_BUCKET:-}" ]]; then
+  export COMPOSE_PROFILES=mock
+  echo "ENGINE_OWNS_DEMO_FEEDS=1" >> .env
+  S="$S publisher"
+  echo "publisher: extra feeds only (the engine publishes the demo feeds)"
 else
   docker compose --profile mock rm --stop --force publisher >/dev/null 2>&1 || true
 fi
@@ -69,7 +81,9 @@ if ! docker compose up -d --no-build --remove-orphans $S; then
   # deploy so the footage problem is seen.
   echo "demo footage failed to start; starting the site without it" >&2
   cp .env.base .env
-  docker compose up -d --no-build --remove-orphans $S
+  # Without the footage there are no extra feeds, so the publisher goes too (unless it is the mock).
+  [[ "$S" == "$BASE_S" ]] || docker compose --profile mock rm --stop --force publisher >/dev/null 2>&1 || true
+  docker compose up -d --no-build --remove-orphans $BASE_S
   rm -f .env.base
   exit 1
 fi
