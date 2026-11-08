@@ -1,5 +1,5 @@
 import { Link, NavLink, useMatch } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Box, Check, ChevronDown, Columns2, Grid2x2, Lock, LockOpen, PanelLeft, RectangleHorizontal, Settings, SlidersHorizontal, Trophy } from 'lucide-react';
+import { Activity, ArrowLeft, ArrowRight, Box, Check, Clapperboard, ChevronDown, Columns2, Grid2x2, Lock, LockOpen, PanelLeft, RectangleHorizontal, Settings, SlidersHorizontal, Trophy } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useNow } from '../lib/hooks';
 import { switchView } from '../lib/view-transition';
@@ -27,6 +27,16 @@ export function Header() {
             <span>Back to live</span>
           </Link>
         </div>
+        <nav className={styles.right} aria-label="Admin">
+          <NavLink to="/admin" end className={({ isActive }) => `${styles.navLink} ${isActive ? styles.active : ''}`}>
+            <Activity size={18} aria-hidden />
+            <span>Operations</span>
+          </NavLink>
+          <NavLink to="/admin/shorts" className={({ isActive }) => `${styles.navLink} ${isActive ? styles.active : ''}`}>
+            <Clapperboard size={18} aria-hidden />
+            <span>Shorts</span>
+          </NavLink>
+        </nav>
       </header>
     );
   }

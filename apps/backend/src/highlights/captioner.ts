@@ -168,7 +168,7 @@ export class GeminiCaptioner implements CaptionModel {
     });
     if (!res.ok) {
       const body = await res.text().catch(() => '');
-      throw new CaptionError(`Gemini HTTP ${res.status}: ${body.slice(0, 200)}`, res.status);
+      throw new CaptionError(`Gemini HTTP ${res.status}: ${geminiErrorMessage(body)}`, res.status, retryDelayMs(body));
     }
     const json = (await res.json()) as {
       candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }>;
@@ -186,10 +186,39 @@ export class CaptionError extends Error {
   constructor(
     message: string,
     readonly status?: number,
+    /** Server-advised wait before retrying (Gemini `RetryInfo.retryDelay`). */
+    readonly retryAfterMs?: number,
   ) {
     super(message);
   }
 }
+
+/** Parse `google.rpc.RetryInfo` from a Gemini error body, e.g. `"retryDelay": "23003s"`. */
+export function retryDelayMs(body: string): number | undefined {
+  try {
+    const details = (JSON.parse(body) as { error?: { details?: Array<Record<string, unknown>> } }).error?.details ?? [];
+    for (const d of details) {
+      const m = typeof d.retryDelay === 'string' ? /^(\d+(?:\.\d+)?)s$/.exec(d.retryDelay) : null;
+      if (m) return Math.round(Number(m[1]) * 1000);
+    }
+  } catch {
+    // Not JSON: no advice.
+  }
+  return undefined;
+}
+
+function geminiErrorMessage(body: string): string {
+  try {
+    const msg = (JSON.parse(body) as { error?: { message?: string } }).error?.message;
+    if (msg) return msg.replace(/\s+/g, ' ').slice(0, 400);
+  } catch {
+    // Fall through to the raw body.
+  }
+  return body.slice(0, 200);
+}
+
+/** Longest server-advised pause honoured (a daily free-tier quota resets within a day). */
+const MAX_ADVISED_PAUSE_MS = 24 * 3_600_000;
 
 export function parseDraft(text: string, durationSec = Infinity): CaptionDraft {
   const raw = JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, '')) as Partial<CaptionDraft>;
@@ -259,12 +288,12 @@ export class HighlightCaptioner {
   private running = false;
   private pausedUntil = 0;
   private stopped = false;
-  readonly stats = { model: 'template', generated: 0, failed: 0, pending: 0, lastError: null as string | null };
+  readonly stats = { model: 'template', generated: 0, failed: 0, pending: 0, lastError: null as string | null, pausedUntil: null as string | null };
 
   constructor(private readonly opts: CaptionerOptions) {
     if (opts.model) this.stats.model = opts.model.name;
     else {
-      this.stats.lastError = 'Video descriptions are disabled: set GEMINI_API_KEY in the repository .env or backend environment and restart the backend.';
+      this.stats.lastError = 'Video descriptions are disabled: set CAPTION_PROVIDER=local (free, runs llama-server) or GEMINI_API_KEY in the repository .env and restart the backend.';
       opts.log.warn(this.stats.lastError);
     }
   }
@@ -353,6 +382,7 @@ export class HighlightCaptioner {
       this.attempts.delete(h.id);
       this.done.set(h.id, sig);
       this.stats.generated++;
+      this.stats.pausedUntil = null;
       this.opts.onCaption(h.id, {
         ...draft,
         model: model.name,
@@ -365,6 +395,19 @@ export class HighlightCaptioner {
       if (this.stopped || this.latest.get(h.id) !== sig) return;
       const status = err instanceof CaptionError ? err.status : undefined;
       this.stats.lastError = (err as Error).message;
+      const advised = err instanceof CaptionError ? err.retryAfterMs : undefined;
+      if (advised !== undefined && advised > 120_000) {
+        // Quota exhausted (e.g. the free tier's daily request cap) or the local model server is
+        // down: every request until then would fail too, so pause the whole queue and keep this
+        // highlight queued.
+        const wait = Math.min(advised, MAX_ADVISED_PAUSE_MS);
+        this.pausedUntil = Date.now() + wait;
+        this.queue.set(h.id, h);
+        this.stats.pending = this.queue.size;
+        this.stats.pausedUntil = new Date(this.pausedUntil).toISOString();
+        this.opts.log.warn('caption model unavailable; pausing queue', { id: h.id, status, retryInMs: wait });
+        return;
+      }
       if (status === 429 || (status !== undefined && status >= 500)) {
         this.pausedUntil = Date.now() + Math.min(120_000, 15_000 * 2 ** attempt);
         if (attempt < 3 && !this.queue.has(h.id)) {

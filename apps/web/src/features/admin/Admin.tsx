@@ -5,7 +5,6 @@ import { SportIcon } from '../../components/SportIcon';
 import { apiUrl } from '../../lib/env';
 import { formatAge, formatDuration } from '../../lib/format';
 import { useDocumentVisible } from '../../lib/hooks';
-import { ContentOverview } from './ContentOverview';
 import { Dialog } from './Dialog';
 import { Sparkline } from './Sparkline';
 import styles from './Admin.module.scss';
@@ -283,8 +282,6 @@ export function Admin() {
             </table>
           </div>
         </section>
-
-        <ContentOverview />
 
         <section className={`${styles.panel} ${styles.viewers}`} aria-labelledby="viewers-heading">
           <div className={styles.panelHead}>

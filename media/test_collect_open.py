@@ -26,6 +26,14 @@ class OpenMediaTest(unittest.TestCase):
             self.assertIsNone(m.approved(metadata(name, url)))
         self.assertIsNone(m.approved(metadata('Public domain')))
 
+    def test_wikimedia_requests_require_operator_contact(self):
+        m = importer()
+        m.CONTACT = ''
+        with patch.object(m.urllib.request, 'urlopen') as network:
+            with self.assertRaisesRegex(ValueError, 'MEDIA_CONTACT'):
+                m.request('https://upload.wikimedia.org/file.webm')
+            network.assert_not_called()
+
     def test_primary_youtube_license_and_recording_are_checked(self):
         m = importer()
         clip = {'durationSec': 300}

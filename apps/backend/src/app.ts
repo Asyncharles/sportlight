@@ -17,7 +17,8 @@ import type { BackendConfig } from './config.js';
 import { FeedStore } from './feeds/feed-store.js';
 import { IntensityHistory } from './feeds/history.js';
 import { MomentDetector, type Moment } from './highlights/detector.js';
-import { GeminiCaptioner, HighlightCaptioner } from './highlights/captioner.js';
+import { GeminiCaptioner, HighlightCaptioner, type CaptionModel } from './highlights/captioner.js';
+import { LocalCaptioner } from './highlights/local-captioner.js';
 import { HighlightStore } from './highlights/store.js';
 import type { Logger } from './logger.js';
 import { ViewerRegistry } from './viewers.js';
@@ -36,9 +37,7 @@ export async function createApp(config: BackendConfig, log: Logger) {
   );
   const detector = new MomentDetector(config.highlights);
   const captioner = new HighlightCaptioner({
-    model: config.captions.geminiApiKey
-      ? new GeminiCaptioner(config.captions.geminiApiKey, config.captions.geminiModel)
-      : null,
+    model: captionModel(config),
     mediaFetchBase: config.captions.mediaFetchBase,
     mediaPublicPrefix: config.captions.mediaPublicPrefix,
     ffmpegPath: config.content.ffmpegPath,
@@ -356,4 +355,18 @@ function applyCors(req: IncomingMessage, res: ServerResponse, origins: string[])
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Vary', 'Origin');
   }
+}
+
+function captionModel(config: BackendConfig): CaptionModel | null {
+  const c = config.captions;
+  if (c.provider === 'local') {
+    return new LocalCaptioner({
+      endpoint: c.localUrl,
+      model: c.localModel,
+      ffmpegPath: config.content.ffmpegPath,
+      whisper: { path: config.content.whisperPath, model: config.content.whisperModel, dtw: config.content.whisperDtw },
+    });
+  }
+  if (c.provider === 'gemini' && c.geminiApiKey) return new GeminiCaptioner(c.geminiApiKey, c.geminiModel);
+  return null;
 }

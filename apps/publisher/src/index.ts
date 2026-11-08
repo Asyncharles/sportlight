@@ -11,6 +11,7 @@ import {
 } from '@sportlight/shared';
 import { DEMO_FEEDS, inWindows, intensityAt, type DemoFeed } from './scenario.js';
 import { openDatasetFeeds } from './open-dataset.js';
+import { planLive } from './live-slots.js';
 
 /**
  * Mock feed provider. Publishes the demo scenario to RabbitMQ exactly as a real provider adapter
@@ -33,6 +34,10 @@ const config = {
   speed: Number(env.SCENARIO_SPEED ?? 1),
   tickMs: Number(env.TICK_MS ?? 1000),
   reannounceSec: Number(env.REANNOUNCE_SEC ?? 10),
+  /** Most feeds live at once (0 = unlimited); scheduled feeds beyond this wait for a slot. */
+  maxLiveFeeds: Number(env.MAX_LIVE_FEEDS ?? 10),
+  /** When feeds are waiting, a feed hands over its slot after this long on air. */
+  liveRotateSec: Number(env.LIVE_ROTATE_SEC ?? 300),
   chaos: {
     duplicateRate: Number(env.CHAOS_DUPLICATE_RATE ?? 0),
     delayRate: Number(env.CHAOS_DELAY_RATE ?? 0),
@@ -50,6 +55,7 @@ const log = (msg: string, fields?: Record<string, unknown>) =>
 export interface CatalogClip {
   sportId?: string;
   dataset?: string;
+  synthetic?: boolean;
   credits?: MediaCredit[];
   attributionNotice?: string;
   id: string;
@@ -243,34 +249,45 @@ function announce(feed: DemoFeed, run: Run, now: number) {
   );
 }
 
+const lastEndedMs = new Map<string, number>();
+
 function step(catalog: Map<string, CatalogClip>, processStart: number) {
   const now = Date.now();
   const t = config.offsetSec + ((now - processStart) / 1000) * config.speed;
+  const byId = new Map(activeFeeds.map((feed) => [feed.id, feed]));
+
+  const plan = planLive({
+    wanted: activeFeeds.filter((feed) => catalog.has(feed.clipId) && inWindows(feed.live, t)).map((feed) => feed.id),
+    running: new Map([...runs].map(([id, run]) => [id, run.startedAtMs])),
+    lastEndedMs,
+    now,
+    max: config.maxLiveFeeds,
+    rotateMs: config.liveRotateSec * 1000,
+  });
+  for (const id of plan.stop) {
+    const feed = byId.get(id)!;
+    publish(envelope(feed, runs.get(id)!, 'feed.ended', { reason: 'completed' }), feed.sportId);
+    runs.delete(id);
+    lastEndedMs.set(id, now);
+    log('feed ended', { feedId: id });
+  }
+  for (const id of plan.start) {
+    const feed = byId.get(id)!;
+    const run: Run = {
+      runId: `${feed.id}.${now.toString(36)}`,
+      startedAtMs: now,
+      seq: 0,
+      source: sourceFor(catalog.get(feed.clipId)!),
+      unavailable: false,
+      lastAnnounceMs: 0,
+    };
+    runs.set(feed.id, run);
+    announce(feed, run, now);
+    log('feed started', { feedId: feed.id, runId: run.runId, live: runs.size });
+  }
 
   for (const feed of activeFeeds) {
-    const clip = catalog.get(feed.clipId);
-    if (!clip) continue;
-    const shouldBeLive = inWindows(feed.live, t);
-    let run = runs.get(feed.id);
-
-    if (shouldBeLive && !run) {
-      run = {
-        runId: `${feed.id}.${now.toString(36)}`,
-        startedAtMs: now,
-        seq: 0,
-        source: sourceFor(clip),
-        unavailable: false,
-        lastAnnounceMs: 0,
-      };
-      runs.set(feed.id, run);
-      announce(feed, run, now);
-      log('feed started', { feedId: feed.id, runId: run.runId });
-    } else if (!shouldBeLive && run) {
-      publish(envelope(feed, run, 'feed.ended', { reason: 'completed' }), feed.sportId);
-      runs.delete(feed.id);
-      log('feed ended', { feedId: feed.id });
-      continue;
-    }
+    const run = runs.get(feed.id);
     if (!run) continue;
 
     const unavailable = inWindows(feed.outages, t);
@@ -306,7 +323,7 @@ async function main() {
   log('starting', { seed: config.seed, speed: config.speed, offsetSec: config.offsetSec, chaos: config.chaos });
   let catalog = await loadCatalog();
   activeFeeds.push(...openDatasetFeeds([...catalog.values()]));
-  log('catalog loaded', { clips: catalog.size, feeds: activeFeeds.length });
+  log('catalog loaded', { clips: catalog.size, feeds: activeFeeds.length, maxLive: config.maxLiveFeeds });
   for (const feed of activeFeeds) {
     const event = catalog.get(feed.clipId)?.event;
     if (event) {

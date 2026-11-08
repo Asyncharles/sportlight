@@ -96,6 +96,8 @@ export async function decodeAudio(
   start: number,
   duration: number,
   dir: string,
+  /** `url` is a local file this process wrote (only then is the file protocol allowed). */
+  localFile = false,
 ): Promise<{ wav?: string; speech: Segment[] }> {
   const wav = join(dir, 'audio.wav');
   const raw = join(dir, 'speech.raw');
@@ -109,7 +111,7 @@ export async function decodeAudio(
         'error',
         '-y',
         '-protocol_whitelist',
-        'http,https,tcp,tls,crypto',
+        localFile ? 'file' : 'http,https,tcp,tls,crypto',
         '-rw_timeout',
         '30000000',
         '-ss',

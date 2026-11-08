@@ -68,6 +68,9 @@ services:
       MEDIA_CATALOG: http://media:8080/catalog.json
       MEDIA_PUBLIC_BASE: /media
       SCENARIO_SEED: ${SCENARIO_SEED:-20261107}
+      # At most this many feeds live at once (0 = all); waiting feeds rotate in every LIVE_ROTATE_SEC.
+      MAX_LIVE_FEEDS: ${MAX_LIVE_FEEDS:-10}
+      LIVE_ROTATE_SEC: ${LIVE_ROTATE_SEC:-300}
       # Light chaos so the backend's ordering/dedupe paths are exercised (see admin view).
       CHAOS_DUPLICATE_RATE: ${CHAOS_DUPLICATE_RATE:-0.02}
       CHAOS_DELAY_RATE: ${CHAOS_DELAY_RATE:-0.02}

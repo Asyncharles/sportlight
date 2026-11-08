@@ -21,7 +21,8 @@
     "format": "prettier --write .",
     "setup:youtube": "node scripts/setup-youtube.mjs",
     "media:open": "python3 media/collect-open.py",
-    "media:replays": "node media/build.mjs"
+    "media:replays": "node media/build.mjs",
+    "captions:server": "llama-server -hf ggml-org/Qwen2.5-VL-7B-Instruct-GGUF:Q4_K_M --host 127.0.0.1 --port 8081 -c 16384 -np 1 --jinja"
   },
   "devDependencies": {
     "@types/node": "^20.19.43",

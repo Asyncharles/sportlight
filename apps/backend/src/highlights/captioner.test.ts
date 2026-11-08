@@ -10,6 +10,7 @@ import {
   momentFacts,
   parseCues,
   parseDraft,
+  retryDelayMs,
 } from './captioner.js';
 
 const log = createLogger('test');
@@ -293,6 +294,34 @@ describe('video caption lifecycle', () => {
     expect(c.stats.failed).toBe(1);
     expect(c.stats.pending).toBe(0);
     c.stop();
+  });
+
+  it('pauses the whole queue until the advised reset instead of burning retries', async () => {
+    vi.useFakeTimers();
+    let calls = 0;
+    const caption = vi.fn(async () => {
+      if (++calls === 1) throw new CaptionError('daily quota', 429, 3_600_000);
+      return draft;
+    });
+    const onCaption = vi.fn();
+    const c = queue(caption, onCaption);
+    c.enqueue(highlight());
+    await vi.advanceTimersByTimeAsync(3_000_000);
+    expect(caption).toHaveBeenCalledTimes(1);
+    expect(c.stats.pending).toBe(1);
+    expect(c.stats.failed).toBe(0);
+    expect(c.stats.pausedUntil).not.toBeNull();
+    await vi.advanceTimersByTimeAsync(700_000);
+    expect(caption).toHaveBeenCalledTimes(2);
+    expect(onCaption).toHaveBeenCalledTimes(1);
+    expect(c.stats.pausedUntil).toBeNull();
+    c.stop();
+  });
+
+  it('reads RetryInfo from a Gemini error body', () => {
+    const body = JSON.stringify({ error: { details: [{ '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: '23003s' }] } });
+    expect(retryDelayMs(body)).toBe(23_003_000);
+    expect(retryDelayMs('not json')).toBeUndefined();
   });
 });
 

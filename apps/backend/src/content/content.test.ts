@@ -39,8 +39,8 @@ function highlight(id = 'abcdef123456', start = 10): Highlight {
     curve: [],
   } as Highlight;
 }
-async function service(highlights: Highlight[] = []) {
-  const dir = await directory();
+async function service(highlights: Highlight[] = [], existing?: string) {
+  const dir = existing ?? (await directory());
   const config = loadConfig({
     DATA_DIR: dir,
     GOOGLE_CLIENT_ID: 'client',
@@ -51,6 +51,24 @@ async function service(highlights: Highlight[] = []) {
   const svc = new ContentService(config, () => highlights, createLogger('test'));
   await svc.init();
   return svc;
+}
+
+let lastBody: Record<string, unknown> = {};
+/** Minimal req/res pair for calling route() directly with a cookie. */
+function fakeRequest(cookie: string) {
+  const req = { method: 'GET', headers: { cookie } } as never;
+  const res = {
+    headersSent: false,
+    setHeader() {},
+    removeHeader() {},
+    writeHead() {
+      return res;
+    },
+    end(body?: string) {
+      lastBody = body ? JSON.parse(body) : {};
+    },
+  } as never;
+  return [req, res] as const;
 }
 
 describe('publishing safety and persistence', () => {
@@ -138,13 +156,13 @@ describe('publishing safety and persistence', () => {
     };
     svc.store.state.settings.enabled = false;
     await svc.tick();
-    expect(svc.store.state.jobs.map((j) => j.status)).toEqual(['queued', 'skipped']);
+    expect(svc.store.state.jobs.map((j) => j.status)).toEqual(['pending', 'discarded']);
     expect(svc.store.state.jobs[0]?.readyAt).toBeGreaterThan(Date.now());
     await svc.tick();
     expect(svc.store.state.jobs).toHaveLength(2);
     await svc.stop();
   });
-  it('skips clips still queued for a previously connected channel', async () => {
+  it('returns clips approved for a previously connected channel to the library', async () => {
     const svc = await service([highlight()]);
     svc.store.state.connection = {
       id: 'channel',
@@ -158,15 +176,16 @@ describe('publishing safety and persistence', () => {
       id: 'old',
       highlight: highlight(),
       channelId: 'previous',
-      status: 'queued',
+      status: 'scheduled',
       createdAt: Date.now(),
       updatedAt: Date.now(),
       readyAt: Date.now(),
       attempts: 0,
-      rendered: false,
+      rendered: true,
     });
     await svc.tick();
-    expect(svc.store.state.jobs[0]?.status).toBe('skipped');
+    expect(svc.store.state.jobs[0]?.status).toBe('ready');
+    expect(svc.store.state.jobs[0]?.channelId).toBeUndefined();
     expect(svc.store.state.jobs[0]?.message).toMatch(/different channel/);
     await svc.stop();
   });
@@ -179,6 +198,7 @@ describe('publishing safety and persistence', () => {
       name: 'Owner',
       refreshToken: 'encrypted',
     };
+    svc.store.state.settings.intervalMinutes = 15;
     const now = Date.now();
     const job = (id: string, extra: object) => ({
       id,
@@ -193,7 +213,7 @@ describe('publishing safety and persistence', () => {
     });
     svc.store.state.jobs.push(
       job('done', { status: 'published', uploadStartedAt: now - 5 * 60_000 }) as never,
-      job('next', { status: 'queued' }) as never,
+      job('next', { status: 'scheduled', rendered: true }) as never,
     );
     expect(svc.schedule(now)).toEqual({
       state: 'waiting',
@@ -203,12 +223,20 @@ describe('publishing safety and persistence', () => {
     });
     svc.store.state.jobs[1]!.status = 'rendering';
     expect(svc.schedule(now)).toEqual({ state: 'working', jobId: 'next' });
-    svc.store.state.jobs[1]!.status = 'skipped';
+    svc.store.state.jobs[1]!.status = 'discarded';
     expect(svc.schedule(now)).toEqual({ state: 'idle' });
     await svc.stop();
   });
-  it('does not create jobs for the archive recorded at connection', async () => {
+  it('generates Shorts into the library without a channel and never uploads them unapproved', async () => {
     const svc = await service([highlight()]);
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    await svc.tick();
+    const job = svc.store.state.jobs[0]!;
+    expect(job.status).toBe('pending');
+    expect(job.channelId).toBeUndefined();
+    job.status = 'ready';
+    job.rendered = true;
     svc.store.state.connection = {
       id: 'channel',
       title: 'Test',
@@ -216,9 +244,79 @@ describe('publishing safety and persistence', () => {
       name: 'Owner',
       refreshToken: 'encrypted',
     };
-    svc.store.state.seen = [highlight().id];
     await svc.tick();
-    expect(svc.store.state.jobs).toHaveLength(0);
+    expect(job.status).toBe('ready');
+    expect(fetch).not.toHaveBeenCalled();
+    await svc.stop();
+  });
+  it('migrates older lifecycles onto the single status, keeping in-flight uploads', async () => {
+    const dir = await directory();
+    const store = new ContentStore(dir);
+    await store.init();
+    const base = { highlight: highlight(), createdAt: 1, updatedAt: 1, readyAt: 1, attempts: 0, channelId: 'c' };
+    const legacy = (revision: number, jobs: object[]) => {
+      store.state.jobsRevision = revision;
+      store.state.jobs = jobs as never;
+    };
+    legacy(1, [
+      { ...base, id: 'rendered', status: 'queued', rendered: true },
+      { ...base, id: 'resuming', status: 'uploading', rendered: true, uploadSession: 'x' },
+    ]);
+    await store.save();
+    let restored = new ContentStore(dir);
+    await restored.init();
+    expect(restored.state.jobs.map((j) => j.status)).toEqual(['ready', 'uploading']);
+    legacy(2, [
+      { ...base, id: 'a', status: 'approved', approved: true, rendered: true },
+      { ...base, id: 'b', status: 'queued', approved: true, rendered: false },
+      { ...base, id: 'c', status: 'attention', approved: true, rendered: true, videoId: 'v' },
+      { ...base, id: 'd', status: 'skipped', rendered: true },
+    ]);
+    await store.save();
+    restored = new ContentStore(dir);
+    await restored.init();
+    expect(restored.state.jobs.map((j) => j.status)).toEqual(['scheduled', 'pending', 'failed', 'discarded']);
+    expect(restored.state.jobs.some((j) => 'approved' in j)).toBe(false);
+    expect(restored.state.jobsRevision).toBe(3);
+    // Legacy statuses written after the bump (by a worker still on old code) are repaired on the next start.
+    legacy(3, [
+      { ...base, id: 'e', status: 'queued', rendered: false },
+      { ...base, id: 'f', status: 'skipped', rendered: false },
+    ]);
+    await store.save();
+    restored = new ContentStore(dir);
+    await restored.init();
+    expect(restored.state.jobs.map((j) => j.status)).toEqual(['pending', 'discarded']);
+  });
+  it('sends a scheduled Short back to review when its highlight changes before upload', async () => {
+    const h = highlight();
+    const svc = await service([h]);
+    svc.store.state.connection = {
+      id: 'channel',
+      title: 'Test',
+      email: 'owner@example.com',
+      name: 'Owner',
+      refreshToken: 'encrypted',
+    };
+    svc.store.state.seen = [h.id];
+    svc.store.state.jobs.push({
+      id: 'job',
+      highlight: highlight(),
+      channelId: 'channel',
+      status: 'scheduled',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      readyAt: Date.now() + 60_000,
+      attempts: 0,
+      rendered: true,
+    });
+    h.caption = { title: 'New title' } as never;
+    svc.store.state.settings.enabled = false;
+    await svc.tick();
+    const job = svc.store.state.jobs[0]!;
+    expect(job.status).toBe('pending');
+    expect(job.channelId).toBeUndefined();
+    expect(job.message).toMatch(/review the new render/);
     await svc.stop();
   });
   it('resumes from the server offset without creating a second upload', async () => {
@@ -315,13 +413,13 @@ describe('publishing safety and persistence', () => {
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
     try {
-      const start = await fetch(`${base}/api/content/auth/start`, { redirect: 'manual' });
+      const start = await fetch(`${base}/api/content/auth/start?mode=connect`, { redirect: 'manual' });
       const state = new URL(start.headers.get('location')!).searchParams.get('state');
       const callback = await fetch(`${base}/api/content/auth/callback?state=${state}&code=test`, {
         redirect: 'manual',
         headers: { cookie: start.headers.get('set-cookie')!.split(';')[0]! },
       });
-      expect(callback.headers.get('location')).toBe('http://localhost:5173/dashboard');
+      expect(callback.headers.get('location')).toBe('http://localhost:5173/admin/shorts');
       const cookie = callback.headers.get('set-cookie')!.split(';')[0]!;
       const overview = await (await fetch(`${base}/api/content/session`, { headers: { cookie } })).json();
       expect(overview.authenticated).toBe(true);
@@ -345,17 +443,39 @@ describe('publishing safety and persistence', () => {
           })
         ).status,
       ).toBe(200);
-      await svc.tick();
-      expect(svc.store.state.jobs).toHaveLength(0);
       moments.push(highlight('new', 80));
       await svc.tick();
-      const job = svc.store.state.jobs[0]!;
-      expect(job.status).toBe('queued');
+      const job = svc.store.state.jobs.find((j) => j.highlight.id === 'new')!;
+      expect(job.status).toBe('pending');
+      // Stand in for FFmpeg: the clip lands in the library, ready for review.
       job.rendered = true;
+      job.status = 'ready';
       job.readyAt = 0;
       const { mkdir } = await import('node:fs/promises');
       await mkdir(join(svc.store.dir, job.id));
       await writeFile(join(svc.store.dir, job.id, 'short.mp4'), 'test video');
+      await svc.tick();
+      expect(job.status).toBe('ready');
+      expect(uploadBody).toBeUndefined();
+      const act = (action: string, ids = [job.id]) =>
+        fetch(`${base}/api/content/jobs/action`, {
+          method: 'POST',
+          headers: { cookie, origin: 'http://localhost:5173', 'x-csrf-token': overview.csrf },
+          body: JSON.stringify({ action, ids }),
+        });
+      expect((await act('restore')).status).toBe(409);
+      expect((await act('publish')).status).toBe(200);
+      expect(job.status).toBe('scheduled');
+      expect(job.channelId).toBe('channel');
+      expect((await act('unschedule')).status).toBe(200);
+      expect(job.status).toBe('ready');
+      expect(job.channelId).toBeUndefined();
+      expect((await act('discard')).status).toBe(200);
+      expect(job.status).toBe('discarded');
+      expect((await act('restore')).status).toBe(200);
+      expect(job.status).toBe('ready');
+      expect((await act('publish')).status).toBe(200);
+      expect(job.status).toBe('scheduled');
       await svc.tick();
       expect(job.status).toBe('processing');
       expect(job.videoId).toBe('uploaded');
@@ -363,9 +483,26 @@ describe('publishing safety and persistence', () => {
       job.nextPollAt = 0;
       await svc.tick();
       expect(job.status).toBe('published');
+      // Published Shorts are final: no action can discard or re-upload them.
+      expect((await act('discard')).status).toBe(409);
+      expect((await act('retry')).status).toBe(409);
       moments.push(highlight('repeat', 82));
       await svc.tick();
-      expect(svc.store.state.jobs[1]?.status).toBe('skipped');
+      expect(svc.store.state.jobs.find((j) => j.highlight.id === 'repeat')?.status).toBe('discarded');
+      // Sessions survive a backend restart (e.g. tsx watch reloads) instead of forcing another Google sign-in.
+      await svc.stop();
+      const restarted = await service(moments, join(svc.store.dir, '..'));
+      expect(
+        (await restarted.route(...fakeRequest(cookie), new URL('http://localhost/api/content/session'))) &&
+          lastBody.authenticated,
+      ).toBe(true);
+      // With a channel connected, signing in again asks only for identity: no consent screen, no YouTube scopes.
+      const signin = await fetch(`${base}/api/content/auth/start`, { redirect: 'manual' });
+      const signinUrl = new URL(signin.headers.get('location')!);
+      expect(signinUrl.searchParams.get('prompt')).toBe('select_account');
+      expect(signinUrl.searchParams.get('scope')).not.toContain('youtube');
+      expect(signinUrl.searchParams.get('access_type')).toBeNull();
+      await restarted.stop();
       // Replaying the same callback cannot obtain another dashboard session.
       const replay = await fetch(`${base}/api/content/auth/callback?state=${state}&code=test`, {
         redirect: 'manual',

@@ -31,6 +31,19 @@ HOST_SLOTS = {}
 MEDIA_LOCK = threading.Lock()
 MEDIA_NEXT = 0.0
 YOUTUBE_SLOTS = threading.BoundedSemaphore(3)
+# Commons page IDs reviewed by eye and found to be mostly not sporting action (interviews, promos,
+# ceremonies, clinics). Discovery rejects them and the importer removes any copies already built.
+NON_ACTION_PAGE_IDS = {
+    195476459,  # chess news package: interviews
+    195840032,  # basketball promo montage
+    195836358,  # soccer tour promo
+    195328802,  # basketball tryouts promo: talking heads and captions
+    84556340,   # chess newsreel: speeches and portraits
+    84557902,   # chess prize-giving ceremony
+    63443983,   # children's tennis clinic
+    89496781,   # rugby: mostly pitch-side interviews
+}
+
 QUERIES = {
     'football': ['"football"', '"soccer"'],
     'basketball': ['"basketball"', '"basketball" "game"'],
@@ -181,6 +194,8 @@ def discover(per_sport):
                     reason = 'American football is not association football'
                 if sport == 'tennis' and re.search(r'table tennis|ping.pong', text):
                     reason = 'table tennis is not court tennis'
+                if p['pageid'] in NON_ACTION_PAGE_IDS:
+                    reason = 'reviewed: not sporting action'
                 if reason:
                     rejected.append({'title': p['title'], 'sportId': sport, 'reason': reason})
                     continue
@@ -225,6 +240,24 @@ def ffmpeg(args):
     run(['ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'error', '-y', *map(str, args)])
 
 
+def render_thumbnails(video, id):
+    thumbs = DIST / 'thumbs' / id
+    temp = DIST / 'thumbs' / (id + '.tmp')
+    shutil.rmtree(temp, ignore_errors=True)
+    temp.mkdir(parents=True)
+    ffmpeg(['-i', video, '-vf', 'fps=1/10:round=up:start_time=0,scale=320:-2', '-start_number', '0', temp / '%d.jpg'])
+    count = len(list(temp.glob('*.jpg')))
+    if not count:
+        raise ValueError('No thumbnails decoded')
+    previous = DIST / 'thumbs' / (id + '.previous')
+    shutil.rmtree(previous, ignore_errors=True)
+    if thumbs.exists():
+        thumbs.rename(previous)
+    temp.rename(thumbs)
+    shutil.rmtree(previous, ignore_errors=True)
+    return count
+
+
 def validate_primary(c, info):
     if not re.fullmatch(r'Creative Commons Attribution(?: license \(reuse allowed\))?', info.get('license', '').strip(), re.I):
         raise ValueError('Primary YouTube source does not currently declare a Creative Commons license')
@@ -242,6 +275,10 @@ def ingest(c):
         previous = json.loads(state.read_text())
         e = previous['entry']
         if previous['hash'] == key and all((DIST / e[k]).exists() for k in ['video', 'poster']):
+            if previous.get('thumbnailVersion') != 2 or not (DIST / e['thumbnails']['template'].replace('{index}', '0')).exists():
+                e['thumbnails']['count'] = render_thumbnails(DIST / e['video'], id)
+                state.write_text(json.dumps({'hash': key, 'entry': e, 'thumbnailVersion': 2}, indent=2) + '\n')
+                print(f'[thumbnails] {id}: aligned to interval starts', flush=True)
             return e
     disk = os.statvfs(ROOT)
     if disk.f_bavail * disk.f_frsize < 4 * 1024 ** 3 + c['sourceBytes'] * 3:
@@ -262,6 +299,8 @@ def ingest(c):
             info_file.write_text(json.dumps(info))
             if not source.exists():
                 run([*common, '--format', 'bestvideo[vcodec^=avc1][height<=720]+bestaudio[ext=m4a]/best[ext=mp4][height<=720]', '--merge-output-format', 'mp4', '--max-filesize', '400M', '--no-progress', '--output', str(CACHE / (id + '.%(ext)s')), c['youtubeSource']])
+        if not source.exists():
+            raise ValueError('Downloader produced no MP4 (unavailable format or size limit)')
         c = {**c, 'downloadUrl': c['youtubeSource'], 'alternateSource': c['youtubeSource'], 'primaryLicenseEvidence': {k: info.get(k) for k in ['id', 'title', 'channel', 'uploader', 'license', 'duration', 'webpage_url']}}
     else:
         source = CACHE / (id + Path(urllib.parse.unquote(c['downloadUrl'])).suffix)
@@ -321,26 +360,32 @@ def ingest(c):
     temp.replace(target)
     poster = f'posters/{id}.jpg'
     ffmpeg(['-ss', min(5, duration / 4), '-i', target, '-frames:v', '1', '-vf', 'scale=640:-2', DIST / poster])
-    thumbs = DIST / 'thumbs' / id
-    thumbs.mkdir(exist_ok=True)
-    ffmpeg(['-i', target, '-vf', 'fps=1/10,scale=320:-2', '-start_number', '0', thumbs / '%d.jpg'])
+    thumbnail_count = render_thumbnails(target, id)
     e = {'id': id, 'sportId': c['sportId'], 'video': 'videos/' + name, 'poster': poster,
          'durationSec': duration, 'width': v['width'], 'height': v['height'], 'fps': v['avg_frame_rate'],
          'hasAudio': audio, 'synthetic': False, 'startOffsetSec': 0, 'dataset': 'commons-open-v1',
          'event': {'title': re.sub(r'\.(webm|ogv|mp4)$', '', c['title'], flags=re.I)[:200],
                    'subtitle': 'Open sports footage · test replay',
                    'broadcaster': {'name': c['author'][:120], 'channel': 'Wikimedia Commons'}},
-         'thumbnails': {'template': f'thumbs/{id}/{{index}}.jpg', 'intervalSec': 10, 'count': len(list(thumbs.glob('*.jpg')))},
+         'thumbnails': {'template': f'thumbs/{id}/{{index}}.jpg', 'intervalSec': 10, 'count': thumbnail_count},
          'credits': [{k: c[k] for k in ['title', 'author', 'license', 'licenseUrl', 'sourceUrl']}],
          'attributionNotice': 'The appearance of U.S. Department of War (DoW) visual information does not imply or constitute DoW endorsement.' if 'dvidshub.net' in json.dumps(c['metadata']) else '',
          'provenance': {'pageId': c['pageId'], 'sourceSha1': c['sourceSha1'], 'downloadSha256': downloaded_sha256, 'downloadUrl': c['downloadUrl'], 'sourceHashVerified': not bool(c.get('downloadVariant') or c.get('alternateSource')), 'sha256': hashlib.sha256(target.read_bytes()).hexdigest(),
                         'restrictions': c['restrictions'], 'changes': 'Transcoded to H.264/AAC MP4; scaled to at most 1280×720; native speed; no trimming.',
                         'evidence': f'rights/{id}.json'}}
     (DIST / 'rights' / (id + '.json')).write_text(json.dumps(c, indent=2) + '\n')
-    state.write_text(json.dumps({'hash': key, 'entry': e}, indent=2) + '\n')
+    state.write_text(json.dumps({'hash': key, 'entry': e, 'thumbnailVersion': 2}, indent=2) + '\n')
     source.unlink()  # output + metadata evidence retained; avoid storing duplicate large originals
     print(f'[ingest] {id}: {duration:.1f}s, {v["width"]}×{v["height"]}, {c["license"]}', flush=True)
     return e
+
+
+def remove_clip(entry):
+    id = entry['id']
+    for path in [DIST / entry['video'], DIST / entry['poster'], DIST / 'rights' / (id + '.json'), DIST / '.state' / (id + '.json')]:
+        path.unlink(missing_ok=True)
+    shutil.rmtree(DIST / 'thumbs' / id, ignore_errors=True)
+    print(f'[removed] {id}: not sporting action', flush=True)
 
 
 def main():
@@ -358,12 +403,19 @@ def main():
     catalog_path = DIST / 'catalog.json'
     catalog = json.loads(catalog_path.read_text()) if catalog_path.exists() else {'version': 1, 'clips': []}
     entries = {c['id']: c for c in catalog['clips']}
+    manifest['clips'] = [c for c in manifest['clips'] if c.get('pageId') not in NON_ACTION_PAGE_IDS]
+    for c in [c for c in entries.values() if (c.get('provenance') or {}).get('pageId') in NON_ACTION_PAGE_IDS]:
+        remove_clip(entries.pop(c['id']))
     failures = []
     def publish():
         catalog.update(generatedAt=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()), clips=list(entries.values()))
         temp = catalog_path.with_suffix('.tmp')
         temp.write_text(json.dumps(catalog, indent=2) + '\n')
         temp.replace(catalog_path)
+        open_path = DIST / 'open-catalog.json'
+        open_temp = open_path.with_suffix('.tmp')
+        open_temp.write_text(json.dumps({**catalog, 'clips': [c for c in entries.values() if c.get('dataset') == 'commons-open-v1']}, indent=2) + '\n')
+        open_temp.replace(open_path)
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as pool:
         futures = {pool.submit(ingest, c): c for c in manifest['clips']}
         for f in concurrent.futures.as_completed(futures):
@@ -390,6 +442,10 @@ def main():
               'licenses': {license: sum(c['credits'][0]['license'] == license for c in selected) for license in sorted({c['credits'][0]['license'] for c in selected})},
               'outputGiB': sum((DIST / c['video']).stat().st_size for c in selected) / 1024 ** 3,
               'sports': {s: sum(c.get('sportId') == s for c in selected) for s in QUERIES}, 'failures': failures}
+    (ROOT / 'open-dataset-report.json').write_text(json.dumps(report, indent=2) + '\n')
+    report['selectedCandidates'] = len(manifest['clips'])
+    report['pendingSources'] = [c['id'] for c in manifest['clips'] if c['id'] not in entries]
+    report['excludedLegacyClips'] = [c['id'] for c in entries.values() if any(x.get('license') == 'YouTube standard license' for x in c.get('credits', []))]
     (ROOT / 'open-dataset-report.json').write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(report, indent=2), flush=True)
     if failures:

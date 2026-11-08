@@ -3,6 +3,7 @@ import { BrowserRouter, HashRouter, Navigate, Outlet, Route, Routes, useLocation
 import { LiveTicker } from './components/LiveTicker';
 import { Header } from './components/Header';
 import { Admin } from './features/admin/Admin';
+import { Shorts } from './features/admin/Shorts';
 import { BestOfToday } from './features/highlights/BestOfToday';
 import { HighlightViewer } from './features/highlights/HighlightViewer';
 import { Landing } from './features/landing/Landing';
@@ -33,6 +34,7 @@ export function App() {
             <Route path="settings/sports" element={<SportsSettings />} />
             <Route path="dashboard" element={<LegacyContentRedirect />} />
             <Route path="admin" element={<Admin />} />
+            <Route path="admin/shorts" element={<Shorts />} />
             <Route path="admin/*" element={<Navigate to="/admin" replace />} />
           </Route>
           {/* Old onboarding URLs: the sports choice now happens in the live page tour. */}
@@ -65,5 +67,5 @@ function Shell() {
 
 function LegacyContentRedirect() {
   const { search, hash } = useLocation();
-  return <Navigate to={{ pathname: '/admin', search, hash }} replace />;
+  return <Navigate to={{ pathname: '/admin/shorts', search, hash }} replace />;
 }

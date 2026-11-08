@@ -3,14 +3,21 @@ import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
-import { dayKey, type ContentOverview, type ContentSchedule, type Highlight } from '@sportlight/shared';
+import {
+  CONTENT_ACTIONS,
+  dayKey,
+  type ContentAction,
+  type ContentOverview,
+  type ContentSchedule,
+  type Highlight,
+} from '@sportlight/shared';
 import { z } from 'zod';
 import type { BackendConfig } from '../config.js';
 import type { Logger } from '../logger.js';
 import { beginUpload, GoogleError, googleFetch, resumeUpload, SCOPES, tokenRequest } from './google.js';
 import { CAPTION_VERSION } from '../highlights/captioner.js';
 import { renderClip } from './renderer.js';
-import { ContentStore, overlaps, publicJob, seal, unseal, type Job } from './store.js';
+import { ContentStore, overlaps, publicJob, seal, unseal, type Connection, type Job, type StoredSession } from './store.js';
 
 const settingsSchema = z
   .object({
@@ -21,25 +28,33 @@ const settingsSchema = z
     intervalMinutes: z.number().int().min(0).max(1440),
   })
   .strict();
-interface Session {
-  email: string;
-  name: string;
-  csrf: string;
-  expires: number;
-}
+const actionSchema = z
+  .object({
+    action: z.enum(Object.keys(CONTENT_ACTIONS) as [ContentAction, ...ContentAction[]]),
+    ids: z.array(z.string().regex(/^[a-f0-9-]+$/)).min(1).max(200),
+  })
+  .strict();
+type Session = StoredSession;
 interface Login {
   verifier: string;
   expires: number;
+  /** signin: identity only, no consent screen. connect: YouTube scopes + offline refresh token. */
+  mode: 'signin' | 'connect';
 }
+/** Dashboard sessions last 30 days and renew on use, so the operator rarely sees Google at all. */
+const SESSION_MS = 30 * 86_400_000;
+const SIGNIN_SCOPES = ['openid', 'email', 'profile'];
 const random = () => randomBytes(32).toString('base64url');
+const hashId = (id: string) => createHash('sha256').update(id).digest('base64url');
+type Lane = 'publish' | 'render';
+const IDLE_MS = 5000;
 const fingerprint = (h: Highlight) => JSON.stringify([h.source, h.clip, h.peak]);
 
 export class ContentService {
   readonly store: ContentStore;
-  private sessions = new Map<string, Session>();
   private logins = new Map<string, Login>();
-  private timer?: NodeJS.Timeout;
-  private running?: Promise<void>;
+  private timers: Partial<Record<Lane, NodeJS.Timeout>> = {};
+  private running: Partial<Record<Lane, Promise<boolean>>> = {};
   private stopped = false;
   private persistenceFailed = false;
   /** YouTube API quota was exhausted; no new uploads begin before this (its midnight Pacific reset). */
@@ -56,10 +71,20 @@ export class ContentService {
   async init() {
     await this.store.init();
   }
+  /**
+   * Two independent lanes: publishing (poll/upload) never waits behind a render backlog, and renders
+   * keep going while a video uploads. A lane that did work runs again at once; an idle lane checks every 5 s.
+   */
   start() {
-    this.timer = setInterval(() => {
-      if (this.running || this.stopped || this.persistenceFailed) return;
-      this.running = this.tick()
+    for (const lane of ['publish', 'render'] as const) this.loop(lane, 0);
+  }
+  private loop(lane: Lane, delay: number) {
+    if (this.stopped || this.persistenceFailed) return;
+    this.timers[lane] = setTimeout(() => {
+      const run = lane === 'publish' ? this.publishTick() : this.renderTick();
+      this.running[lane] = run;
+      run
+        .then((worked) => this.loop(lane, worked ? 0 : IDLE_MS))
         .catch(() => {
           this.log.error(
             'content worker stopped: persistence or unexpected worker failure; restart after checking storage',
@@ -67,14 +92,14 @@ export class ContentService {
           this.persistenceFailed = true;
         })
         .finally(() => {
-          this.running = undefined;
+          if (this.running[lane] === run) delete this.running[lane];
         });
-    }, 5000);
+    }, delay);
   }
   async stop() {
     this.stopped = true;
-    clearInterval(this.timer);
-    await this.running;
+    for (const timer of Object.values(this.timers)) clearTimeout(timer);
+    await Promise.allSettled(Object.values(this.running));
     await this.store.save();
   }
   private missing() {
@@ -98,14 +123,24 @@ export class ContentService {
       `${name}=${value}; Path=/api/content; HttpOnly; SameSite=Lax; Max-Age=${seconds}${this.options.appUrl.startsWith('https:') ? '; Secure' : ''}`,
     );
   }
+  private get sessions() {
+    return (this.store.state.sessions ??= []);
+  }
   private session(req: IncomingMessage) {
     const id = this.cookie(req, 'sl_content');
-    const session = id ? this.sessions.get(id) : undefined;
-    if (!session || session.expires < Date.now()) {
-      if (id) this.sessions.delete(id);
-      return undefined;
-    }
-    return session;
+    if (!id) return undefined;
+    const hash = hashId(id);
+    const session = this.sessions.find((s) => s.id === hash);
+    if (!session || session.expires < Date.now()) return undefined;
+    return { cookie: id, session };
+  }
+  private async createSession(res: ServerResponse, email: string, name: string) {
+    const now = Date.now();
+    const id = random();
+    this.store.state.sessions = this.sessions.filter((s) => s.expires > now).slice(-49);
+    this.sessions.push({ id: hashId(id), email, name, csrf: random(), expires: now + SESSION_MS });
+    await this.store.save();
+    this.setCookie(res, 'sl_content', id, SESSION_MS / 1000);
   }
   private overview(session?: Session): ContentOverview {
     const missing = this.missing();
@@ -134,8 +169,15 @@ export class ContentService {
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Referrer-Policy', 'no-referrer');
     const path = url.pathname.slice('/api/content'.length);
-    const session = this.session(req);
+    const active = this.session(req);
+    const session = active?.session;
     try {
+      if (active && session && session.expires - Date.now() < SESSION_MS / 2) {
+        // Sliding renewal: an operator who visits at least every couple of weeks stays signed in.
+        session.expires = Date.now() + SESSION_MS;
+        await this.store.save();
+        this.setCookie(res, 'sl_content', active.cookie, SESSION_MS / 1000);
+      }
       if (req.method === 'GET' && path === '/session') {
         json(res, 200, this.overview(session));
         return true;
@@ -152,19 +194,21 @@ export class ContentService {
         }
         const state = random();
         const verifier = random();
-        this.logins.set(state, { verifier, expires: Date.now() + 10 * 60_000 });
+        // Sign-in needs no YouTube consent; only (re)connecting a channel asks for it and a refresh token.
+        const mode = url.searchParams.get('mode') === 'connect' || !this.store.state.connection ? 'connect' : 'signin';
+        this.logins.set(state, { verifier, mode, expires: Date.now() + 10 * 60_000 });
         this.setCookie(res, 'sl_oauth', state, 600);
         const authorization = new URL('https://accounts.google.com/o/oauth2/v2/auth');
         authorization.search = new URLSearchParams({
           client_id: this.options.clientId,
           redirect_uri: this.redirectUri(),
           response_type: 'code',
-          scope: SCOPES.join(' '),
-          access_type: 'offline',
-          prompt: 'consent',
           state,
           code_challenge: createHash('sha256').update(verifier).digest('base64url'),
           code_challenge_method: 'S256',
+          ...(mode === 'connect'
+            ? { scope: SCOPES.join(' '), access_type: 'offline', prompt: 'consent', include_granted_scopes: 'true' }
+            : { scope: SIGNIN_SCOPES.join(' '), prompt: 'select_account' }),
         }).toString();
         redirect(res, authorization.href);
         return true;
@@ -201,7 +245,8 @@ export class ContentService {
           return true;
         }
         if (path === '/logout') {
-          this.sessions.delete(this.cookie(req, 'sl_content')!);
+          this.store.state.sessions = this.sessions.filter((s) => s !== session);
+          await this.store.save();
           this.setCookie(res, 'sl_content', '', 0);
           json(res, 200, { ok: true });
           return true;
@@ -214,27 +259,17 @@ export class ContentService {
           json(res, 200, this.overview(session));
           return true;
         }
-        const action = path.match(/^\/jobs\/([a-f0-9-]+)\/(retry|skip)$/);
-        if (action) {
-          const job = this.store.state.jobs.find((j) => j.id === action[1]);
-          if (!job || job.channelId !== this.store.state.connection?.id) {
-            json(res, 404, { error: 'Job not found for this channel.' });
+        if (path === '/jobs/action') {
+          const parsed = actionSchema.safeParse(await readJson(req));
+          if (!parsed.success) {
+            json(res, 400, { error: 'Invalid selection.' });
             return true;
           }
-          if (action[2] === 'skip' && ['queued', 'failed'].includes(job.status) && !job.uploadSession) {
-            job.status = 'skipped';
-            job.message = 'Skipped by operator.';
-          } else if (action[2] === 'retry' && ['failed', 'attention'].includes(job.status) && !job.videoId) {
-            // With a session, retry only probes/resumes it. It never starts a replacement upload.
-            job.status = job.uploadSession ? 'uploading' : 'queued';
-            job.attempts = 0;
-            job.readyAt = Date.now();
-            delete job.message;
-          } else {
-            json(res, 409, { error: 'This job cannot be changed in its current state.' });
+          const result = this.applyAction(parsed.data.action, new Set(parsed.data.ids), Date.now());
+          if (result) {
+            json(res, 409, { error: result });
             return true;
           }
-          job.updatedAt = Date.now();
           await this.store.save();
           json(res, 200, this.overview(session));
           return true;
@@ -258,11 +293,57 @@ export class ContentService {
         path,
         type: error instanceof GoogleError ? error.reason : 'request_failed',
       });
-      if (path === '/auth/callback') redirect(res, `${this.options.appUrl}/dashboard?auth=failed`);
+      if (path === '/auth/callback') redirect(res, `${this.options.appUrl}/admin/shorts?auth=failed`);
       else if (!res.headersSent) json(res, 500, { error: 'Request failed. Check configuration and try again.' });
       else res.destroy();
       return true;
     }
+  }
+  /** Applies one operator action to every selected Short it is valid for. Returns an error message, or nothing. */
+  private applyAction(action: ContentAction, ids: Set<string>, now: number): string | undefined {
+    const state = this.store.state;
+    const connection = state.connection;
+    if (action === 'publish' && (!connection || state.connectionError)) return 'Connect a YouTube channel before publishing.';
+    let changed = 0;
+    for (const job of state.jobs) {
+      if (!ids.has(job.id) || !CONTENT_ACTIONS[action].includes(job.status)) continue;
+      // Once YouTube holds an upload session or a video, only retry (which resumes or re-checks it) applies.
+      if ((job.uploadSession || job.videoId) && action !== 'retry') continue;
+      if (action === 'restore' && !job.rendered) continue;
+      if (action === 'publish') {
+        job.status = 'scheduled';
+        job.channelId = connection!.id;
+        job.readyAt = now;
+      } else if (action === 'unschedule') {
+        job.status = 'ready';
+        delete job.channelId;
+      } else if (action === 'discard') {
+        job.status = 'discarded';
+        delete job.channelId;
+      } else if (action === 'restore') {
+        job.status = 'ready';
+      } else {
+        // Retry resumes the existing session or re-checks the existing video; it never starts a replacement upload.
+        job.status = job.videoId
+          ? 'processing'
+          : job.uploadSession
+            ? 'uploading'
+            : !job.rendered
+              ? 'pending'
+              : job.channelId === connection?.id && connection
+                ? 'scheduled'
+                : 'ready';
+        if (job.status === 'ready') delete job.channelId;
+        job.nextPollAt = now;
+        job.attempts = 0;
+        job.readyAt = now;
+        if (job.status === 'pending') job.createdAt = now;
+      }
+      job.message = action === 'discard' ? 'Discarded by operator.' : undefined;
+      job.updatedAt = now;
+      changed++;
+    }
+    return changed ? undefined : 'None of the selected Shorts can be changed in their current state.';
   }
   private redirectUri() {
     return `${this.options.appUrl}/api/content/auth/callback`;
@@ -287,12 +368,6 @@ export class ContentService {
       grant_type: 'authorization_code',
       redirect_uri: this.redirectUri(),
     });
-    if (
-      !tokens.scope ||
-      !SCOPES.filter((s) => s.includes('youtube')).every((s) => tokens.scope!.split(' ').includes(s))
-    ) {
-      throw new Error('YouTube permissions were not granted');
-    }
     const headers = { Authorization: `Bearer ${tokens.access_token}` };
     const identity = (await (
       await googleFetch('https://openidconnect.googleapis.com/v1/userinfo', { headers })
@@ -300,6 +375,18 @@ export class ContentService {
     const email = identity.email?.toLowerCase();
     if (!email || identity.email_verified !== true || !this.options.allowedEmails.includes(email))
       throw new Error('Account is not an authorized operator');
+    if (login.mode === 'signin') {
+      // The channel's refresh token is untouched; signing in only proves who the operator is.
+      await this.createSession(res, email, identity.name || email);
+      redirect(res, `${this.options.appUrl}/admin/shorts`);
+      return;
+    }
+    if (
+      !tokens.scope ||
+      !SCOPES.filter((s) => s.includes('youtube')).every((s) => tokens.scope!.split(' ').includes(s))
+    ) {
+      throw new Error('YouTube permissions were not granted');
+    }
     const channels = (await (
       await googleFetch('https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true', { headers })
     ).json()) as { items?: { id: string; snippet: { title: string } }[] };
@@ -314,7 +401,6 @@ export class ContentService {
         ? previous.refreshToken
         : undefined;
     if (!refreshToken) throw new Error('Offline access was not granted');
-    if (!previous) this.store.state.seen = this.highlights().map((h) => h.id);
     this.store.state.connection = {
       id: channel.id,
       title: channel.snippet.title,
@@ -323,12 +409,8 @@ export class ContentService {
       refreshToken,
     };
     delete this.store.state.connectionError;
-    await this.store.save();
-    for (const [key, value] of this.sessions) if (value.expires < Date.now()) this.sessions.delete(key);
-    const id = random();
-    this.sessions.set(id, { email, name: identity.name || email, csrf: random(), expires: Date.now() + 12 * 3600_000 });
-    this.setCookie(res, 'sl_content', id, 12 * 3600);
-    redirect(res, `${this.options.appUrl}/dashboard`);
+    await this.createSession(res, email, identity.name || email);
+    redirect(res, `${this.options.appUrl}/admin/shorts`);
   }
   private async accessToken() {
     const connection = this.store.state.connection;
@@ -354,35 +436,44 @@ export class ContentService {
   }
   private async discover(now: number) {
     const state = this.store.state;
-    if (!state.connection) return;
+    const connection = state.connection;
     const highlights = this.highlights();
     const current = new Map(highlights.map((h) => [h.id, h]));
     const seen = new Set(state.seen);
     let changed = false;
     for (const job of state.jobs) {
-      if (job.status !== 'queued' || job.uploadSession) continue;
-      if (job.channelId !== state.connection.id) {
-        // The worker only serves the connected channel, so these would otherwise wait forever.
-        job.status = 'skipped';
-        job.message = 'A different channel was connected before this was uploaded.';
+      if (job.uploadSession || job.videoId) continue;
+      if (job.status === 'scheduled' && connection && job.channelId !== connection.id) {
+        // Scheduled for a channel that is no longer connected: back to the library for a fresh decision.
+        job.status = 'ready';
+        delete job.channelId;
+        job.message = 'A different channel was connected; publish again to upload it.';
         job.updatedAt = now;
         changed = true;
-        continue;
       }
+      if (!['pending', 'ready', 'scheduled'].includes(job.status)) continue;
       const h = current.get(job.highlight.id);
       if (!h) {
-        job.status = 'skipped';
-        job.message = 'Highlight was merged or removed.';
-        changed = true;
-      } else if (fingerprint(job.highlight) !== fingerprint(h)) {
+        // A finished render stays usable after its highlight ages out; only unrendered work is dropped.
+        if (job.status === 'pending') {
+          job.status = 'discarded';
+          job.message = 'Highlight was merged or removed.';
+          job.updatedAt = now;
+          changed = true;
+        }
+        continue;
+      }
+      const moved = fingerprint(job.highlight) !== fingerprint(h);
+      if (moved || JSON.stringify(job.highlight.caption) !== JSON.stringify(h.caption)) {
+        // Footage, title and commentary are burned into the video, so any change needs a fresh render.
+        // A scheduled Short goes back to review: the operator only ever publishes a video they could preview.
+        if (job.status === 'scheduled') job.message = 'The highlight changed after you published it; review the new render.';
+        delete job.channelId;
         job.highlight = structuredClone(h);
         job.rendered = false;
-        job.readyAt = now + this.options.settleSeconds * 1000;
-        changed = true;
-      } else if (JSON.stringify(job.highlight.caption) !== JSON.stringify(h.caption)) {
-        // Title and commentary are burned into the video, so a new caption needs a fresh render.
-        job.highlight = structuredClone(h);
-        job.rendered = false;
+        job.status = 'pending';
+        if (moved) job.readyAt = now + this.options.settleSeconds * 1000;
+        job.updatedAt = now;
         changed = true;
       }
     }
@@ -390,16 +481,13 @@ export class ContentService {
       if (seen.has(h.id)) continue;
       seen.add(h.id);
       changed = true;
-      const duplicate = state.jobs.some(
-        (j) => j.channelId === state.connection!.id && j.status !== 'skipped' && overlaps(j.highlight, h),
-      );
+      const duplicate = state.jobs.some((j) => j.status !== 'discarded' && overlaps(j.highlight, h));
       state.jobs.push({
         id: randomUUID(),
         highlight: structuredClone(h),
-        channelId: state.connection.id,
-        status: duplicate || h.peak.score < state.settings.minPeak ? 'skipped' : 'queued',
+        status: duplicate || h.peak.score < state.settings.minPeak ? 'discarded' : 'pending',
         message: duplicate
-          ? 'Repeated footage already queued or uploaded.'
+          ? 'Repeated footage already in the library.'
           : h.peak.score < state.settings.minPeak
             ? 'Below the minimum peak intensity.'
             : undefined,
@@ -414,49 +502,68 @@ export class ContentService {
     state.seen = [...seen].filter((id) => current.has(id));
     if (changed) await this.store.save();
   }
-  /** One serialized worker; all durable transitions precede external side effects. */
+  /** Both lanes once, in order (used by tests and one-off runs). */
   async tick(now = Date.now()) {
-    if (this.stopped || this.missing().length) return;
+    await this.publishTick(now);
+    await this.renderTick(now);
+  }
+  /**
+   * Publishing lane: one YouTube poll or upload step. All durable transitions precede external side effects.
+   * Only Shorts the operator scheduled are uploaded. Returns whether it did any work.
+   */
+  async publishTick(now = Date.now()): Promise<boolean> {
+    if (this.stopped || this.missing().length) return false;
     await this.discover(now);
     const state = this.store.state;
     const connection = state.connection;
-    if (!connection || state.connectionError) return;
+    if (!connection || state.connectionError) return false;
     const processing = state.jobs.find(
       (j) => j.channelId === connection.id && j.status === 'processing' && (j.nextPollAt ?? 0) <= now,
     );
     if (processing) {
       await this.poll(processing, now);
+      return true;
+    }
+    if (!state.settings.enabled) return false;
+    const job = state.jobs.find(
+      (j) => j.channelId === connection.id && ['scheduled', 'uploading'].includes(j.status) && j.readyAt <= now,
+    );
+    if (!job || (!job.uploadSession && !this.uploadSlotOpen(now))) return false;
+    // Failures and quota stops push readyAt forward, so a busy lane never spins on the same job.
+    await this.upload(job, connection, now);
+    return true;
+  }
+  /** Render lane: Shorts are rendered into the library automatically, one at a time. */
+  async renderTick(now = Date.now()): Promise<boolean> {
+    if (this.stopped || this.missing().length) return false;
+    await this.discover(now);
+    const job = this.store.state.jobs.find((j) => j.status === 'pending' && j.readyAt <= now);
+    if (!job) return false;
+    await this.render(job, now);
+    return true;
+  }
+  private uploadSlotOpen(now: number) {
+    const state = this.store.state;
+    const started = state.jobs.filter((j) => j.uploadStartedAt !== undefined);
+    const tz = this.config.highlights.timezone;
+    if (
+      state.settings.dailyLimit > 0 &&
+      started.filter((j) => dayKey(j.uploadStartedAt!, tz) === dayKey(now, tz)).length >= state.settings.dailyLimit
+    )
+      return false;
+    if (now < this.quotaResetAt) return false;
+    return !started.some((j) => now - j.uploadStartedAt! < state.settings.intervalMinutes * 60_000);
+  }
+  private async render(job: Job, now: number) {
+    const state = this.store.state;
+    if (now - job.createdAt > 24 * 3600_000) {
+      job.status = 'discarded';
+      job.message = 'Expired after 24 hours waiting to render.';
+      job.updatedAt = now;
+      await this.store.save();
       return;
     }
-    if (!state.settings.enabled) return;
-    const jobs = state.jobs.filter((j) => j.channelId === connection.id);
-    const job = jobs.find((j) => ['queued', 'uploading'].includes(j.status) && j.readyAt <= now);
-    if (!job) return;
-    if (!job.uploadSession) {
-      if (now - job.createdAt > 24 * 3600_000) {
-        job.status = 'skipped';
-        job.message = 'Expired after 24 hours in the queue.';
-        await this.store.save();
-        return;
-      }
-      if (job.highlight.peak.score < state.settings.minPeak) {
-        job.status = 'skipped';
-        job.message = 'Below the minimum peak intensity.';
-        await this.store.save();
-        return;
-      }
-      const started = jobs.filter((j) => j.uploadStartedAt !== undefined);
-      const today = dayKey(now, this.config.highlights.timezone);
-      if (
-        state.settings.dailyLimit > 0 &&
-        started.filter((j) => dayKey(j.uploadStartedAt!, this.config.highlights.timezone) === today).length >=
-          state.settings.dailyLimit
-      )
-        return;
-      if (now < this.quotaResetAt) return;
-      if (started.some((j) => now - j.uploadStartedAt! < state.settings.intervalMinutes * 60_000)) return;
-    }
-    if (!job.rendered && !job.uploadSession && this.awaitingCaption(job, now)) {
+    if (this.awaitingCaption(job, now)) {
       job.readyAt = now + 15_000;
       job.message = 'Waiting for the video caption and commentary transcript.';
       job.updatedAt = now;
@@ -464,53 +571,65 @@ export class ContentService {
       return;
     }
     try {
-      if (!job.rendered) {
-        job.status = 'rendering';
-        delete job.message;
-        job.updatedAt = now;
-        await this.store.save();
-        const render = await renderClip(
-          job.highlight,
-          join(this.store.dir, job.id),
-          this.options.mediaBase,
-          this.config.captions.mediaPublicPrefix,
-          this.options.ffmpegPath,
-          { path: this.options.whisperPath, model: this.options.whisperModel, dtw: this.options.whisperDtw },
-        );
-        this.log.info('short rendered', { job: job.id, captions: render.captions });
-        if (render.warning) this.log.warn(render.warning, { job: job.id });
+      job.status = 'rendering';
+      job.updatedAt = now;
+      await this.store.save();
+      const render = await renderClip(
+        job.highlight,
+        join(this.store.dir, job.id),
+        this.options.mediaBase,
+        this.config.captions.mediaPublicPrefix,
+        this.options.ffmpegPath,
+        { path: this.options.whisperPath, model: this.options.whisperModel, dtw: this.options.whisperDtw },
+      );
+      this.log.info('short rendered', { job: job.id, captions: render.captions });
+      if (render.warning) this.log.warn(render.warning, { job: job.id });
+      // A highlight can be merged while FFmpeg is working. Never offer superseded footage.
+      const latest = this.highlights().find((h) => h.id === job.highlight.id);
+      if (latest && fingerprint(latest) !== fingerprint(job.highlight)) {
+        job.highlight = structuredClone(latest);
+        job.rendered = false;
+        job.status = 'pending';
+        job.readyAt = Date.now() + this.options.settleSeconds * 1000;
+      } else if (job.highlight.peak.score < state.settings.minPeak) {
+        job.status = 'discarded';
+        job.message = 'Below the minimum peak intensity.';
+      } else {
         job.rendered = true;
-        job.status = 'queued';
-        await this.store.save();
+        job.attempts = 0;
+        job.status = 'ready';
+        job.readyAt = Date.now();
+        // Keep the note explaining why a previously published Short is back in review.
+        if (!job.message?.startsWith('The highlight changed')) delete job.message;
       }
-      // A highlight can be merged while FFmpeg is working. Never publish superseded footage.
-      if (!job.uploadSession) {
-        const latest = this.highlights().find((h) => h.id === job.highlight.id);
-        if (!latest || fingerprint(latest) !== fingerprint(job.highlight)) {
-          job.status = latest ? 'queued' : 'skipped';
-          job.rendered = false;
-          if (latest) job.highlight = structuredClone(latest);
-          job.readyAt = Date.now() + this.options.settleSeconds * 1000;
-          job.message = latest
-            ? 'Highlight changed; preparing its latest revision.'
-            : 'Highlight was merged or removed.';
-          await this.store.save();
-          return;
-        }
-        if (job.highlight.peak.score < state.settings.minPeak) {
-          job.status = 'skipped';
-          job.message = 'Below the minimum peak intensity.';
-          await this.store.save();
-          return;
-        }
-      }
-      // Pause/disconnect can arrive while FFmpeg runs. Stop before issuing an upload.
-      if (!state.settings.enabled || state.connection !== connection || this.stopped) return;
+    } catch {
+      job.attempts++;
+      job.status = job.attempts < 5 ? 'pending' : 'failed';
+      job.readyAt = Date.now() + Math.min(3600_000, 30_000 * 2 ** job.attempts);
+      job.message =
+        job.status === 'failed'
+          ? 'Rendering failed repeatedly. Check media availability, then retry.'
+          : 'Rendering interrupted. Retrying automatically.';
+    }
+    job.updatedAt = Date.now();
+    await this.store.save();
+  }
+  private async upload(job: Job, connection: Connection, now: number) {
+    const state = this.store.state;
+    const halted = () =>
+      !state.settings.enabled ||
+      state.connection !== connection ||
+      this.stopped ||
+      !['scheduled', 'uploading'].includes(job.status);
+    try {
       const token = await this.accessToken();
+      if (halted()) return;
       if (!job.uploadSession) {
         // Persist the reservation before beginning a resumable session; count ambiguous starts conservatively.
         job.uploadStartedAt = Date.now();
         job.status = 'uploading';
+        delete job.message;
+        job.updatedAt = now;
         await this.store.save();
         const session = await beginUpload(token, this.file(job), job.highlight);
         job.uploadSession = seal(session, this.options.encryptionKey);
@@ -531,7 +650,7 @@ export class ContentService {
         // Not a fault of this clip: wait for YouTube's daily quota reset and carry on, without burning attempts.
         this.quotaResetAt = nextPacificMidnight(Date.now());
         if (!job.uploadSession) delete job.uploadStartedAt;
-        job.status = job.uploadSession ? 'uploading' : 'queued';
+        job.status = job.uploadSession ? 'uploading' : 'scheduled';
         job.readyAt = this.quotaResetAt;
         job.message =
           'YouTube API daily quota reached. Uploads resume automatically after the quota resets (midnight Pacific).';
@@ -542,19 +661,13 @@ export class ContentService {
       job.attempts++;
       const expired = error instanceof GoogleError && [404, 410].includes(error.status) && job.uploadSession;
       const retryable = !(error instanceof GoogleError) || error.status >= 500 || error.status === 429;
-      job.status = expired
-        ? 'attention'
-        : retryable && job.attempts < 5
-          ? job.uploadSession
-            ? 'uploading'
-            : 'queued'
-          : 'failed';
+      job.status = !expired && retryable && job.attempts < 5 ? (job.uploadSession ? 'uploading' : 'scheduled') : 'failed';
       job.readyAt = Date.now() + Math.min(3600_000, 30_000 * 2 ** job.attempts);
       job.message = expired
         ? 'Upload session expired. Check YouTube Studio before taking further action; no replacement will be uploaded automatically.'
         : error instanceof GoogleError
           ? error.message
-          : 'Rendering or upload interrupted. Retrying safely; check media availability if this persists.';
+          : 'Upload interrupted. Retrying safely.';
     }
     job.updatedAt = Date.now();
     await this.store.save();
@@ -563,13 +676,12 @@ export class ContentService {
   schedule(now: number): ContentSchedule {
     const state = this.store.state;
     const connection = state.connection;
-    if (!connection || state.connectionError || this.persistenceFailed) return { state: 'blocked' };
-    const jobs = state.jobs.filter((j) => j.channelId === connection.id);
-    const active = jobs.find((j) => ['rendering', 'uploading', 'processing'].includes(j.status));
+    const active = state.jobs.find((j) => ['rendering', 'uploading', 'processing'].includes(j.status));
     if (active) return { state: 'working', jobId: active.id };
+    if (!connection || state.connectionError || this.persistenceFailed) return { state: 'blocked' };
     if (!state.settings.enabled) return { state: 'paused' };
-    const queued = jobs.filter((j) => j.status === 'queued');
-    const next = queued.find((j) => j.readyAt <= now) ?? queued.sort((a, b) => a.readyAt - b.readyAt)[0];
+    const scheduled = state.jobs.filter((j) => j.channelId === connection.id && j.status === 'scheduled');
+    const next = scheduled.find((j) => j.readyAt <= now) ?? [...scheduled].sort((a, b) => a.readyAt - b.readyAt)[0];
     if (!next) return { state: 'idle' };
     const wait = (reason: ContentSchedule['reason'], nextAt?: number): ContentSchedule => ({
       state: 'waiting',
@@ -577,8 +689,7 @@ export class ContentService {
       reason,
       nextAt,
     });
-    if (next.uploadSession) return wait('settling', next.readyAt);
-    const started = jobs.filter((j) => j.uploadStartedAt !== undefined);
+    const started = state.jobs.filter((j) => j.uploadStartedAt !== undefined);
     const tz = this.config.highlights.timezone;
     if (
       state.settings.dailyLimit > 0 &&
@@ -589,7 +700,7 @@ export class ContentService {
     const lastStart = Math.max(0, ...started.map((j) => j.uploadStartedAt!));
     const slot = lastStart + state.settings.intervalMinutes * 60_000;
     if (slot > now && slot >= next.readyAt) return wait('interval', slot);
-    if (next.readyAt > now) return wait(next.message?.includes('caption') ? 'caption' : 'settling', next.readyAt);
+    if (next.readyAt > now) return wait('retry', next.readyAt);
     return wait(undefined, now);
   }
   /** With a model configured, give it up to 10 minutes to write the caption the render burns in. */
@@ -620,26 +731,26 @@ export class ContentService {
         ['failed', 'rejected', 'deleted'].includes(video.status.uploadStatus) ||
         ['failed', 'terminated'].includes(video.processingDetails?.processingStatus ?? '')
       ) {
-        job.status = 'attention';
+        job.status = 'failed';
         job.message = `YouTube could not publish this video (${video.status.rejectionReason || video.status.uploadStatus}). Check YouTube Studio.`;
       } else if (
         video.status.uploadStatus === 'processed' ||
         video.processingDetails?.processingStatus === 'succeeded'
       ) {
-        job.status = job.visibility === 'public' ? 'published' : 'attention';
+        job.status = job.visibility === 'public' ? 'published' : 'failed';
         job.message =
           job.visibility === 'public'
             ? undefined
             : `YouTube reports ${job.visibility} visibility. Check channel or API restrictions in YouTube Studio.`;
       } else if (now - (job.uploadStartedAt ?? job.createdAt) > 24 * 3600_000) {
-        job.status = 'attention';
+        job.status = 'failed';
         job.message = 'YouTube processing has not completed after 24 hours. Check YouTube Studio.';
       }
       job.attempts = 0;
     } catch {
       job.attempts++;
       if (job.attempts >= 10) {
-        job.status = 'attention';
+        job.status = 'failed';
         job.message =
           'Could not confirm YouTube processing. Check YouTube Studio; this video will not be uploaded again.';
       }

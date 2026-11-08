@@ -49,19 +49,13 @@
 .grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
-  grid-template-rows: minmax(0, 3fr) minmax(0, 2fr);
-  grid-template-areas:
-    'streams content'
-    'streams viewers';
+  grid-template-areas: 'streams viewers';
   gap: 12px;
   min-height: 0;
 }
 
 .streams {
   grid-area: streams;
-}
-.content {
-  grid-area: content;
 }
 .viewers {
   grid-area: viewers;
@@ -428,33 +422,6 @@
   flex-wrap: wrap;
 }
 
-.miniStats {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  border-bottom: 1px solid var(--border);
-}
-
-.miniStat {
-  padding: 8px 14px;
-  & + & {
-    box-shadow: inset 1px 0 0 var(--border);
-  }
-}
-
-.miniValue {
-  font-size: 18px;
-  font-weight: 750;
-  line-height: 1.2;
-}
-
-.connect {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 16px 14px;
-}
-
 .tilePill {
   display: inline-block;
   margin: 2px 4px 2px 0;
@@ -547,18 +514,6 @@
 
 // ---------------------------------------------------------------- page sections
 
-.notice {
-  margin: 0;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border);
-  font-size: 13px;
-  color: var(--text-muted);
-}
-
-.static tbody tr {
-  cursor: default;
-}
-
 .extLink {
   display: inline-flex;
   align-items: center;
@@ -571,63 +526,16 @@
   }
 }
 
-.textButton {
-  border: 0;
-  padding: 0;
-  background: none;
-  color: var(--text);
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-  &:hover:not(:disabled) {
-    text-decoration: underline;
-  }
-}
-
-.settings {
-  .sub {
-    margin-top: 12px;
-    font-size: 12px;
-  }
-}
-
-.settingFields {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  margin-bottom: 16px;
-
-  label {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    font-size: 12px;
-    font-weight: 650;
-    color: var(--text-muted);
-  }
-
-  input {
-    width: 170px;
-    height: 36px;
-    padding: 0 10px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border-strong);
-    background: var(--bg);
-    color: var(--text);
-    font: inherit;
-  }
-}
-
 // ---------------------------------------------------------------- responsive
 
-// Narrower screens: streams on top, publishing + viewers side by side beneath.
+// Narrower screens: streams on top, viewers beneath.
 @media (max-width: 1180px) {
   .grid {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(0, 3fr) minmax(0, 2fr);
     grid-template-areas:
-      'streams streams'
-      'content viewers';
+      'streams'
+      'viewers';
   }
 }
 
@@ -645,89 +553,9 @@
     grid-template-rows: none;
     grid-template-areas:
       'streams'
-      'content'
       'viewers';
   }
   .panelBody {
     max-height: 60dvh;
-  }
-}
-
-.now {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin: 10px 14px;
-  padding: 10px 12px;
-  border-radius: var(--radius);
-  background: var(--surface-2);
-  font-size: 13px;
-}
-.nowHead {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 8px;
-}
-.nowLabel {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-.stages {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 4px;
-  margin: 6px 0 0;
-  padding: 0;
-  list-style: none;
-  font-size: 11px;
-  color: var(--text-faint);
-  li {
-    padding-top: 6px;
-    border-top: 3px solid var(--border);
-  }
-}
-.stageDone {
-  color: var(--text-muted);
-  border-top-color: #5f8a00 !important;
-}
-.stageActive {
-  color: var(--text);
-  font-weight: 650;
-  border-top-color: #d69e2e !important;
-}
-.jobSection + .jobSection,
-.jobSection + .skipped {
-  border-top: 1px solid var(--border);
-}
-.sectionTitle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-  padding: 10px 14px 4px;
-  font-size: 12px;
-  font-weight: 650;
-  color: var(--text-muted);
-}
-.more {
-  padding: 6px 14px;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-.skipped {
-  summary {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 4px 8px;
-    padding: 10px 14px;
-    font-size: 13px;
-    font-weight: 650;
-    color: var(--text-muted);
-    cursor: pointer;
   }
 }

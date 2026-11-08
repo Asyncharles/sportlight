@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { ContentJob, ContentSettings, Highlight } from '@sportlight/shared';
+import type { ContentJob, ContentSettings, ContentStatus, Highlight } from '@sportlight/shared';
 
 export interface Job extends ContentJob {
   uploadSession?: string;
@@ -15,9 +15,27 @@ export interface Connection {
   name: string;
   refreshToken: string;
 }
+/** A signed-in dashboard session. Persisted so backend restarts don't sign the operator out. */
+export interface StoredSession {
+  /** SHA-256 of the cookie value; the raw value is never stored. */
+  id: string;
+  email: string;
+  name: string;
+  csrf: string;
+  expires: number;
+}
 interface State {
   version: 1;
-  /** Settings schema revision; 2 introduced `dailyLimit: 0` meaning no daily cap. */
+  /**
+   * Job lifecycle revision. 2 introduced the review library (nothing uploads without approval);
+   * 3 folded the `approved` flag into status and merged duplicate states.
+   */
+  jobsRevision?: number;
+  sessions?: StoredSession[];
+  /**
+   * Settings schema revision; 2 introduced `dailyLimit: 0` meaning no daily cap,
+   * 3 introduced `intervalMinutes: 0` meaning no spacing between uploads.
+   */
   settingsRevision?: number;
   settings: ContentSettings;
   connection?: Connection;
@@ -30,8 +48,10 @@ interface State {
 export class ContentStore {
   state: State = {
     version: 1,
-    settings: { enabled: true, minPeak: 90, dailyLimit: 0, intervalMinutes: 15 },
-    settingsRevision: 2,
+    settings: { enabled: true, minPeak: 90, dailyLimit: 0, intervalMinutes: 0 },
+    settingsRevision: 3,
+    jobsRevision: 3,
+    sessions: [],
     jobs: [],
     seen: [],
   };
@@ -50,8 +70,22 @@ export class ContentStore {
       if (this.state.settings.dailyLimit === 5) this.state.settings.dailyLimit = 0;
       this.state.settingsRevision = 2;
     }
+    if ((this.state.settingsRevision ?? 1) < 3) {
+      // Likewise the old 15-minute spacing default; lift it so approved Shorts publish back to back.
+      if (this.state.settings.intervalMinutes === 15) this.state.settings.intervalMinutes = 0;
+      this.state.settingsRevision = 3;
+    }
+    if ((this.state.jobsRevision ?? 1) < 3) {
+      for (const job of this.state.jobs) migrateJob(job as LegacyJob, this.state.jobsRevision ?? 1);
+      this.state.jobsRevision = 3;
+    }
+    // Repair stragglers: a worker still running older code can write legacy statuses after the revision bump.
+    for (const job of this.state.jobs as LegacyJob[]) {
+      if (job.status in LEGACY_STATUSES || 'approved' in job) migrateJob(job, 3);
+    }
+    this.state.sessions = (this.state.sessions ?? []).filter((s) => s.expires > Date.now());
     for (const job of this.state.jobs) {
-      if (job.status === 'rendering') job.status = 'queued';
+      if (job.status === 'rendering') job.status = 'pending';
       // Preserve uploading jobs and their resumable URL; never create another upload after an ambiguous result.
     }
     await this.save();
@@ -66,6 +100,29 @@ export class ContentStore {
     this.pending = operation.catch(() => {});
     return operation;
   }
+}
+
+const LEGACY_STATUSES = { queued: true, approved: true, attention: true, skipped: true };
+type LegacyJob =Omit<Job, 'status'> & { status: ContentStatus | 'queued' | 'approved' | 'attention' | 'skipped'; approved?: boolean };
+/**
+ * Maps revision 1/2 jobs onto the single-status lifecycle. Anything with an upload in flight keeps it;
+ * an approval for a Short that still needed (re-)rendering is dropped so the operator reviews the final video.
+ */
+function migrateJob(job: LegacyJob, revision: number) {
+  const inFlight = Boolean(job.uploadSession || job.videoId);
+  // Revision 1 had no library: everything queued was implicitly approved.
+  const approved = revision < 2 ? inFlight : Boolean(job.approved);
+  const map: Record<string, ContentStatus> = {
+    queued: job.rendered && !approved ? 'ready' : 'pending',
+    approved: 'scheduled',
+    attention: 'failed',
+    skipped: 'discarded',
+  };
+  let status = map[job.status] ?? (job.status as ContentStatus);
+  if (status === 'ready' && approved && job.channelId) status = 'scheduled';
+  if (status === 'scheduled' && !job.rendered) status = 'pending';
+  job.status = status;
+  delete job.approved;
 }
 
 export function seal(value: string, key: string): string {

@@ -36,7 +36,7 @@ export interface AdminOverview {
   highlights: {
     day: string;
     count: number;
-    captions: { model: string; generated: number; failed: number; pending: number; lastError: string | null };
+    captions: { model: string; generated: number; failed: number; pending: number; lastError: string | null; pausedUntil: string | null };
   };
   config: {
     selection: SelectionConfig;

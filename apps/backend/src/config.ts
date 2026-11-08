@@ -38,6 +38,10 @@ export interface BackendConfig {
     whisperPath: string; whisperModel: string; whisperDtw?: string;
   };
   captions: {
+    /** `local` (llama-server vision model + whisper), `gemini`, or `template` (no model). */
+    provider: 'local' | 'gemini' | 'template';
+    localUrl: string;
+    localModel: string;
     /** Gemini API key. Without one, highlights keep their deterministic template captions. */
     geminiApiKey: string | null;
     geminiModel: string;
@@ -113,6 +117,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig 
       whisperDtw: env.WHISPER_DTW?.trim() || undefined,
     },
     captions: {
+      provider: captionProvider(env),
+      localUrl: str('LOCAL_CAPTION_URL', 'http://127.0.0.1:8081'),
+      localModel: str('LOCAL_CAPTION_MODEL', 'qwen2.5-vl-7b'),
       geminiApiKey: env.GEMINI_API_KEY?.trim() || null,
       geminiModel: str('GEMINI_MODEL', 'gemini-3.6-flash'),
       mediaFetchBase: str('MEDIA_FETCH_BASE', 'http://localhost:5173/media'),
@@ -136,4 +143,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig 
   }
   if (config.content.settleSeconds < 5 || config.content.settleSeconds > 3600) throw new Error('CONTENT_SETTLE_SECONDS must be between 5 and 3600');
   return config;
+}
+
+function captionProvider(env: NodeJS.ProcessEnv): BackendConfig['captions']['provider'] {
+  const raw = env.CAPTION_PROVIDER?.trim().toLowerCase();
+  if (!raw) return env.GEMINI_API_KEY?.trim() ? 'gemini' : 'template';
+  if (raw === 'local' || raw === 'gemini' || raw === 'template') return raw;
+  throw new Error(`CAPTION_PROVIDER must be local, gemini or template, got "${raw}"`);
 }
