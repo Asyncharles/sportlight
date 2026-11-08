@@ -32,6 +32,7 @@ jobs:
       IMAGE_TAG: ${{ github.sha }}
       MEDIA_PATHS: media             # every repo path the media image is built from
       AMQP_URL: amqp://ci:ci@broker.invalid:5672/ci   # keeps compose interpolation happy
+      MEDIA_CONTACT: ${{ vars.MEDIA_CONTACT }}        # media build arg: identifies us to Wikimedia
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
