@@ -22,6 +22,9 @@ if [[ -n "${DEMO_FOOTAGE_BUCKET:-}" ]]; then
   # Demo clips and tuning/; never the striped timing_audio_only/ clips.
   gcloud storage rsync -r --exclude='^timing_audio_only/' "gs://$DEMO_FOOTAGE_BUCKET/samples" "$FOOTAGE/videos" --quiet
   gcloud storage rsync -r "gs://$DEMO_FOOTAGE_BUCKET/sportlight-local" "$FOOTAGE/local" --quiet
+  # The videos are mounted inside the read-only local/ mount, so their mount point must already
+  # exist on the host: Docker cannot create it inside a read-only mount.
+  mkdir -p "$FOOTAGE/local/videos"
   chmod -R a+rX "$FOOTAGE"   # nginx in the media container reads it as a non-root user
   {
     echo "LOCAL_FOOTAGE_DIR=$FOOTAGE/videos"
