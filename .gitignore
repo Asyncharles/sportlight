@@ -13,6 +13,10 @@ data/
 apps/backend/data/
 
 media/.tools/
+# Media run outputs: discovery candidates and local reports
+media/open-candidates.json
+media/open-dataset-report.json
+media/open-verification-report.json
 
 # Python media importer bytecode
 media/__pycache__/

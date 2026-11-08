@@ -34,16 +34,6 @@ class OpenMediaTest(unittest.TestCase):
                 m.request('https://upload.wikimedia.org/file.webm')
             network.assert_not_called()
 
-    def test_primary_youtube_license_and_recording_are_checked(self):
-        m = importer()
-        clip = {'durationSec': 300}
-        m.validate_primary(clip, {'license': 'Creative Commons Attribution license (reuse allowed)', 'duration': 300})
-        for license in ['Standard YouTube License', 'CC BY-NC 4.0', 'CC BY-SA 4.0', '']:
-            with self.assertRaises(ValueError):
-                m.validate_primary(clip, {'license': license, 'duration': 300})
-        with self.assertRaises(ValueError):
-            m.validate_primary(clip, {'license': 'Creative Commons Attribution license (reuse allowed)', 'duration': 270})
-
     def test_server_cooldown_is_honored_after_a_process_restart(self):
         with tempfile.TemporaryDirectory() as d:
             m = importer()

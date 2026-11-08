@@ -1,6 +1,6 @@
 # Builds the four images on the GitHub runner (small Node/nginx images, unlike the
 # CUDA engine) and pushes them to Artifact Registry tagged with the git SHA.
-# The media image (slow: downloads and transcodes replays) is rebuilt only when its
+# The media image (downloads and transcodes the core Commons set, ~450 MB) is rebuilt only when its
 # sources change; otherwise the existing image is re-tagged.
 name: images
 
@@ -32,6 +32,7 @@ jobs:
       IMAGE_TAG: ${{ github.sha }}
       MEDIA_PATHS: media             # every repo path the media image is built from
       AMQP_URL: amqp://ci:ci@broker.invalid:5672/ci   # keeps compose interpolation happy
+      MEDIA_CONTACT: ${{ vars.MEDIA_CONTACT }}        # media build arg: identifies us to Wikimedia
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -59,6 +60,11 @@ jobs:
           echo "key=$key" >> "$GITHUB_OUTPUT"
           echo "rebuild=$rebuild" >> "$GITHUB_OUTPUT"
           echo "media sources $key, rebuild=$rebuild"
+
+      - name: Check MEDIA_CONTACT
+        if: steps.media.outputs.rebuild == 'true'
+        run: |
+          [[ -n "$MEDIA_CONTACT" ]] || { echo "::error::Set the MEDIA_CONTACT repository variable (project URL or email); Wikimedia requires it for downloads."; exit 1; }
 
       - name: Build and push
         env:

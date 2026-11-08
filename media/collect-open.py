@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-"""Discover rights-documented Commons sports videos and ingest browser-ready test media.
-Standard library only; requires ffmpeg/ffprobe. Never downloads standard-license YouTube.
+"""Ingest the curated core set of rights-documented Commons sports videos as browser-ready media.
+Standard library only; requires ffmpeg/ffprobe. Downloads directly from Wikimedia Commons only.
+The catalog contains exactly the clips in open-sources.json; --discover writes candidates to
+open-candidates.json for review instead of touching the curated manifest.
 """
 import argparse
 import concurrent.futures
@@ -22,6 +24,7 @@ ROOT = Path(__file__).resolve().parent
 DIST = ROOT / 'dist'
 CACHE = ROOT / '.cache' / 'open'
 MANIFEST = ROOT / 'open-sources.json'
+CANDIDATES = ROOT / 'open-candidates.json'
 API = 'https://commons.wikimedia.org/w/api.php'
 CONTACT = os.environ.get('MEDIA_CONTACT', '').strip()
 UA = f'SportlightDatasetBot/1.0 ({CONTACT or "local open sports test collection"})'
@@ -30,7 +33,6 @@ NEXT_REQUEST = {}
 HOST_SLOTS = {}
 MEDIA_LOCK = threading.Lock()
 MEDIA_NEXT = 0.0
-YOUTUBE_SLOTS = threading.BoundedSemaphore(3)
 # Commons page IDs reviewed by eye and found to be mostly not sporting action (interviews, promos,
 # ceremonies, clinics). Discovery rejects them and the importer removes any copies already built.
 NON_ACTION_PAGE_IDS = {
@@ -221,7 +223,8 @@ def discover(per_sport):
     manifest = {'version': 1, 'discoveredAt': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
                 'policy': 'Explicit CC0, CC BY or public domain metadata only. No standard YouTube, NC, ND or SA.',
                 'clips': clips, 'rejected': rejected}
-    MANIFEST.write_text(json.dumps(manifest, indent=2) + '\n')
+    CANDIDATES.write_text(json.dumps(manifest, indent=2) + '\n')
+    print(f'[discover] wrote {CANDIDATES.name}; copy reviewed clips into {MANIFEST.name}', flush=True)
     return manifest
 
 
@@ -258,13 +261,6 @@ def render_thumbnails(video, id):
     return count
 
 
-def validate_primary(c, info):
-    if not re.fullmatch(r'Creative Commons Attribution(?: license \(reuse allowed\))?', info.get('license', '').strip(), re.I):
-        raise ValueError('Primary YouTube source does not currently declare a Creative Commons license')
-    if abs(float(info.get('duration', 0)) - c['durationSec']) > 2:
-        raise ValueError('Primary source duration differs from the selected recording')
-
-
 def ingest(c):
     if not approved(c['metadata']):
         raise ValueError('Source no longer matches license allowlist')
@@ -284,26 +280,8 @@ def ingest(c):
     if disk.f_bavail * disk.f_frsize < 4 * 1024 ** 3 + c['sourceBytes'] * 3:
         raise RuntimeError('Keeping 4 GiB free-space reserve')
     if c.get('youtubeSource'):
-        downloader = os.environ.get('YT_DLP') or (str(ROOT / '.tools/bin/yt-dlp') if (ROOT / '.tools/bin/yt-dlp').exists() else shutil.which('yt-dlp'))
-        if not downloader:
-            raise RuntimeError('This source needs yt-dlp[default]; set YT_DLP or install yt-dlp')
-        info_file = CACHE / (id + '.primary.json')
-        source = CACHE / (id + '.mp4')
-        node = os.environ.get('MEDIA_NODE') or ('/opt/homebrew/bin/node' if Path('/opt/homebrew/bin/node').exists() else shutil.which('node'))
-        if not node or int(run([node, '--version']).strip().lstrip('v').split('.')[0]) < 22:
-            raise ValueError('YouTube sources need Node >=22 for yt-dlp; set MEDIA_NODE to a supported executable')
-        common = [downloader, '--ignore-config', '--no-playlist', '--js-runtimes', f'node:{node}', '--remote-components', 'ejs:github', '--socket-timeout', '30', '--retries', '3', '--fragment-retries', '3']
-        with YOUTUBE_SLOTS:
-            info = json.loads(info_file.read_text()) if info_file.exists() else json.loads(run([*common, '--skip-download', '--dump-single-json', c['youtubeSource']]))
-            validate_primary(c, info)
-            info_file.write_text(json.dumps(info))
-            if not source.exists():
-                run([*common, '--format', 'bestvideo[vcodec^=avc1][height<=720]+bestaudio[ext=m4a]/best[ext=mp4][height<=720]', '--merge-output-format', 'mp4', '--max-filesize', '400M', '--no-progress', '--output', str(CACHE / (id + '.%(ext)s')), c['youtubeSource']])
-        if not source.exists():
-            raise ValueError('Downloader produced no MP4 (unavailable format or size limit)')
-        c = {**c, 'downloadUrl': c['youtubeSource'], 'alternateSource': c['youtubeSource'], 'primaryLicenseEvidence': {k: info.get(k) for k in ['id', 'title', 'channel', 'uploader', 'license', 'duration', 'webpage_url']}}
-    else:
-        source = CACHE / (id + Path(urllib.parse.unquote(c['downloadUrl'])).suffix)
+        raise ValueError('YouTube-sourced clips are not part of the core set')
+    source = CACHE / (id + Path(urllib.parse.unquote(c['downloadUrl'])).suffix)
     if not source.exists():
         if os.statvfs(ROOT).f_bavail * os.statvfs(ROOT).f_frsize < 4 * 1024 ** 3 + c['sourceBytes'] * 3:
             raise RuntimeError('Keeping 4 GiB free-space reserve')
@@ -332,7 +310,7 @@ def ingest(c):
     with source.open('rb') as f:
         while block := f.read(1024 * 1024):
             sha1.update(block)
-    if not c.get('alternateSource') and not c.get('downloadVariant') and sha1.hexdigest() != c['sourceSha1']:
+    if not c.get('downloadVariant') and sha1.hexdigest() != c['sourceSha1']:
         source.unlink()
         if c.get('commonsDownloadUrl') and c['commonsDownloadUrl'] != c['downloadUrl']:
             print(f'[source] {id}: archive bytes differ; fetching the declared Commons original', flush=True)
@@ -370,7 +348,7 @@ def ingest(c):
          'thumbnails': {'template': f'thumbs/{id}/{{index}}.jpg', 'intervalSec': 10, 'count': thumbnail_count},
          'credits': [{k: c[k] for k in ['title', 'author', 'license', 'licenseUrl', 'sourceUrl']}],
          'attributionNotice': 'The appearance of U.S. Department of War (DoW) visual information does not imply or constitute DoW endorsement.' if 'dvidshub.net' in json.dumps(c['metadata']) else '',
-         'provenance': {'pageId': c['pageId'], 'sourceSha1': c['sourceSha1'], 'downloadSha256': downloaded_sha256, 'downloadUrl': c['downloadUrl'], 'sourceHashVerified': not bool(c.get('downloadVariant') or c.get('alternateSource')), 'sha256': hashlib.sha256(target.read_bytes()).hexdigest(),
+         'provenance': {'pageId': c['pageId'], 'sourceSha1': c['sourceSha1'], 'downloadSha256': downloaded_sha256, 'downloadUrl': c['downloadUrl'], 'sourceHashVerified': not c.get('downloadVariant'), 'sha256': hashlib.sha256(target.read_bytes()).hexdigest(),
                         'restrictions': c['restrictions'], 'changes': 'Transcoded to H.264/AAC MP4; scaled to at most 1280×720; native speed; no trimming.',
                         'evidence': f'rights/{id}.json'}}
     (DIST / 'rights' / (id + '.json')).write_text(json.dumps(c, indent=2) + '\n')
@@ -380,24 +358,25 @@ def ingest(c):
     return e
 
 
-def remove_clip(entry):
+def remove_clip(entry, reason):
     id = entry['id']
     for path in [DIST / entry['video'], DIST / entry['poster'], DIST / 'rights' / (id + '.json'), DIST / '.state' / (id + '.json')]:
         path.unlink(missing_ok=True)
     shutil.rmtree(DIST / 'thumbs' / id, ignore_errors=True)
-    print(f'[removed] {id}: not sporting action', flush=True)
+    print(f'[removed] {id}: {reason}', flush=True)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--discover', action='store_true', help='Refresh the checked-in source manifest')
-    parser.add_argument('--discover-only', action='store_true')
+    parser.add_argument('--discover', action='store_true', help=f'Search Commons and write {CANDIDATES.name} for review, then exit')
     parser.add_argument('--per-sport', type=int, default=12)
     parser.add_argument('--workers', type=int, default=3)
+    parser.add_argument('--prune', action='store_true', help='Delete built files for clips no longer in the manifest')
     args = parser.parse_args()
-    manifest = discover(args.per_sport) if args.discover or not MANIFEST.exists() else json.loads(MANIFEST.read_text())
-    if args.discover_only:
+    if args.discover:
+        discover(args.per_sport)
         return
+    manifest = json.loads(MANIFEST.read_text())
     for d in [CACHE, *(DIST / p for p in ['videos', 'posters', 'thumbs', '.state', 'rights'])]:
         d.mkdir(parents=True, exist_ok=True)
     catalog_path = DIST / 'catalog.json'
@@ -405,7 +384,14 @@ def main():
     entries = {c['id']: c for c in catalog['clips']}
     manifest['clips'] = [c for c in manifest['clips'] if c.get('pageId') not in NON_ACTION_PAGE_IDS]
     for c in [c for c in entries.values() if (c.get('provenance') or {}).get('pageId') in NON_ACTION_PAGE_IDS]:
-        remove_clip(entries.pop(c['id']))
+        remove_clip(entries.pop(c['id']), 'not sporting action')
+    # The catalog is exactly the core set. Other open clips leave the catalog; their files stay
+    # (cached by source hash) unless --prune is given. Legacy replays from build.mjs are kept.
+    core = {c['id'] for c in manifest['clips']}
+    for c in [c for c in entries.values() if c.get('dataset') == 'commons-open-v1' and c['id'] not in core]:
+        entries.pop(c['id'])
+        if args.prune:
+            remove_clip(c, 'not in the core set')
     failures = []
     def publish():
         catalog.update(generatedAt=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()), clips=list(entries.values()))

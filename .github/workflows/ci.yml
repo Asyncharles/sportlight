@@ -25,6 +25,7 @@ jobs:
       - run: npm ci
       - run: npm run build -w @sportlight/shared   # tests import its dist/
       - run: npm test
+      - run: python3 -m unittest discover -s media -p 'test_*.py'   # media importer
       - run: npm run typecheck
       - run: npm run build
       - name: Compose files parse (dummy values; nothing secret here)
