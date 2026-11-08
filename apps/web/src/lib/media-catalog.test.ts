@@ -12,6 +12,7 @@ describe('landing media from the catalog', () => {
       video: '/media/videos/open-tennis-1-ab12cd34ef.mp4#t=30',
       poster: '/media/thumbs/open-tennis-1/3.jpg',
       startSec: 30,
+      broadcast: false,
     });
   });
 
@@ -26,6 +27,7 @@ describe('landing media from the catalog', () => {
       { id: 'fake', sportId: 'chess', synthetic: true, video: 'videos/fake.mp4', durationSec: 60 },
     ]);
     expect(media.get('football')?.video).toBe('/media/local/videos/fb_arg_fra_2022.mp4#t=60');
+    expect(media.get('football')?.broadcast).toBe(true);
     expect(media.get('cycling')?.video).toMatch(/cyc-long/);
     expect(media.has('chess')).toBe(false);
     expect([...media.keys()].sort()).toEqual(['cycling', 'football']);
@@ -46,6 +48,6 @@ describe('landing media from the catalog', () => {
     const media = pickSportMedia([
       { id: 'c', sportId: 'chess', dataset: 'commons-open-v1', video: 'videos/c.mp4', poster: 'posters/c.jpg', durationSec: 20 },
     ]);
-    expect(media.get('chess')).toEqual({ video: '/media/videos/c.mp4#t=4', poster: '/media/posters/c.jpg', startSec: 4 });
+    expect(media.get('chess')).toEqual({ video: '/media/videos/c.mp4#t=4', poster: '/media/posters/c.jpg', startSec: 4, broadcast: false });
   });
 });

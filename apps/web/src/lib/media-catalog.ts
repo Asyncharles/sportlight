@@ -25,6 +25,8 @@ export interface CatalogMedia {
   video: string;
   /** Media second to start (and loop back) to. */
   startSec: number;
+  /** A real broadcast (the engine demo clips), not open test footage. */
+  broadcast: boolean;
 }
 
 /** Lower is preferred: our real demo broadcasts, then the open set, then anything else. */
@@ -75,6 +77,7 @@ export function pickSportMedia(clips: readonly CatalogClip[]): Map<string, Catal
       poster: poster ? mediaUrl(`/media/${poster}`) : undefined,
       video: `${mediaUrl(`/media/${clip.video}`)}#t=${startSec}`,
       startSec,
+      broadcast: clip.dataset === 'local-engine-v1',
     });
   }
   return out;
@@ -110,6 +113,11 @@ export function loadMediaCatalog(): Promise<void> {
 /** The catalog clip for a sport, if the catalog has loaded and has one. */
 export function catalogMedia(sportId: string): CatalogMedia | undefined {
   return bySport.get(sportId);
+}
+
+/** Sports whose clip is a real broadcast (the demo footage is mounted), in catalog order. */
+export function broadcastSports(): string[] {
+  return [...bySport].filter(([, m]) => m.broadcast).map(([sport]) => sport);
 }
 
 /** Loads the catalog once; re-renders the caller when it arrives. Returns a version for memo deps. */
