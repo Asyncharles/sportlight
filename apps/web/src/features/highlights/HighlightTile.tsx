@@ -7,6 +7,7 @@ import { useHighlightStill } from '../../lib/frame-grab';
 import { highlightTitle, showsEventSeparately } from '../../lib/highlights';
 import { formatDuration, formatTimeOfDay } from '../../lib/format';
 import { useMediaQuery, useNearViewport, useReducedMotion } from '../../lib/hooks';
+import { useReleaseVideo } from '../../lib/release-video';
 import styles from './HighlightTile.module.scss';
 
 const PREVIEW_DELAY_MS = 280;
@@ -94,6 +95,7 @@ export function HighlightTile({
 function PreviewVideo({ highlight: h, onShown }: { highlight: Highlight; onShown: () => void }) {
   const ref = useRef<HTMLVideoElement>(null);
   const [shown, setShown] = useState(false);
+  useReleaseVideo(ref); // each hover mounts a player of the whole broadcast
   useEffect(() => {
     const v = ref.current;
     if (!v) return;
